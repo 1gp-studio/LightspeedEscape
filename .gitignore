@@ -1,0 +1,12 @@
+# Build / editor / OS noise
+node_modules/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.log
+
+# Local assistant workspace (project memory, scratch files) — never published
+.workbuddy/
+.shots/
+.claude/settings.local.json

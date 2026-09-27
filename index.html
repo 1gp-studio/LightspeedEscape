@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0a0e1c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>光速逃亡</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=ZCOOL+QingKe+HuangYou&display=swap">
+<link rel="stylesheet" href="src/css/base.css">
+<link rel="stylesheet" href="src/css/view.css">
+<link rel="stylesheet" href="src/css/screens.css">
+</head>
+<body class="standalone">
+<div id="app" lang="zh-CN">
+  <div id="view"></div>
+  <div id="overlays"></div>
+  <div id="toasts"></div>
+</div>
+<!-- BUILD:SCRIPTS (order matters only for load-time side effects; every file is an IIFE on window.G) -->
+<script src="src/core/ns.js"></script>
+<script src="src/core/rng.js"></script>
+<script src="src/core/util.js"></script>
+<script src="src/data/rules.js"></script>
+<script src="src/data/systems.js"></script>
+<script src="src/data/weapons.js"></script>
+<script src="src/data/crew.js"></script>
+<script src="src/data/ships.js"></script>
+<script src="src/data/enemies.js"></script>
+<script src="src/data/sectors.js"></script>
+<script src="src/data/events.js"></script>
+<script src="src/data/text.js"></script>
+<script src="src/sim/ship.js"></script>
+<script src="src/sim/crew.js"></script>
+<script src="src/sim/enemies.js"></script>
+<script src="src/sim/ai.js"></script>
+<script src="src/sim/combat.js"></script>
+<script src="src/sim/map.js"></script>
+<script src="src/sim/events.js"></script>
+<script src="src/sim/store.js"></script>
+<script src="src/sim/run.js"></script>
+<script src="src/sim/save.js"></script>
+<script src="src/ui/dom.js"></script>
+<script src="src/ui/input.js"></script>
+<script src="src/ui/audio.js"></script>
+<script src="src/ui/render.js"></script>
+<script src="src/ui/view.js"></script>
+<script src="src/ui/screens/title.js"></script>
+<script src="src/ui/screens/map.js"></script>
+<script src="src/ui/screens/event.js"></script>
+<script src="src/ui/screens/store.js"></script>
+<script src="src/ui/screens/ship.js"></script>
+<script src="src/ui/screens/reward.js"></script>
+<script src="src/ui/screens/sector.js"></script>
+<script src="src/ui/screens/end.js"></script>
+<script src="src/ui/screens/menu.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=ZCOOL+QingKe+HuangYou&display=swap">
+<link rel="stylesheet" href="/src/css/base.css">
+<link rel="stylesheet" href="/src/css/view.css">
+<link rel="stylesheet" href="/src/css/screens.css">
+<style>
+  /* Headless Chrome freezes CSS animations part-way through its virtual-time budget, which would
+     capture overlays mid fade-in. Pin every animation and transition to its end state instead. */
+  *, *::before, *::after {
+    animation-duration: 1ms !important; animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important; transition: none !important;
+  }
+  /* --window-size does not equal the CSS viewport in headless mode (390x664 lands on ~512x664 while
+     the capture still clips to the top-left 390x664), so pin the stage to the top-left corner instead
+     of letting #app centre itself in a wider viewport and get sliced on the right edge. */
+  html, body { width: 390px; height: 664px; overflow: hidden; margin: 0; background: var(--bg); }
+  #app { width: 390px; max-width: 390px; height: 664px; margin: 0; }
+</style>
+</head>
+<body class="standalone">
+<div id="app" lang="zh-CN">
+  <div id="view"></div>
+  <div id="overlays"></div>
+  <div id="toasts"></div>
+</div>
+<script src="/src/core/ns.js"></script>
+<script src="/src/core/rng.js"></script>
+<script src="/src/core/util.js"></script>
+<script src="/src/data/rules.js"></script>
+<script src="/src/data/systems.js"></script>
+<script src="/src/data/weapons.js"></script>
+<script src="/src/data/crew.js"></script>
+<script src="/src/data/ships.js"></script>
+<script src="/src/data/enemies.js"></script>
+<script src="/src/data/sectors.js"></script>
+<script src="/src/data/events.js"></script>
+<script src="/src/data/text.js"></script>
+<script src="/src/sim/ship.js"></script>
+<script src="/src/sim/crew.js"></script>
+<script src="/src/sim/enemies.js"></script>
+<script src="/src/sim/ai.js"></script>
+<script src="/src/sim/combat.js"></script>
+<script src="/src/sim/map.js"></script>
+<script src="/src/sim/events.js"></script>
+<script src="/src/sim/store.js"></script>
+<script src="/src/sim/run.js"></script>
+<script src="/src/sim/save.js"></script>
+<script src="/src/ui/dom.js"></script>
+<script src="/src/ui/input.js"></script>
+<script src="/src/ui/audio.js"></script>
+<script src="/src/ui/render.js"></script>
+<script src="/src/ui/view.js"></script>
+<script src="/src/ui/screens/title.js"></script>
+<script src="/src/ui/screens/map.js"></script>
+<script src="/src/ui/screens/event.js"></script>
+<script src="/src/ui/screens/store.js"></script>
+<script src="/src/ui/screens/ship.js"></script>
+<script src="/src/ui/screens/reward.js"></script>
+<script src="/src/ui/screens/sector.js"></script>
+<script src="/src/ui/screens/end.js"></script>
+<script src="/src/main.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// Dev-only screenshot harness (not part of the build; index.html is the manifest).
+//   ?scene=title|combat|map|hub|event|sector|ship|store   ?frames=N   ?freeze=0
+// Boots straight into a mid-run scene with a fixed seed, steps the simulation
+// deterministically, then freezes the render + UI loops so headless Chrome
+// captures an exact frame. Serve the project (node serve.mjs) and screenshot:
+//   chrome --headless=new --window-size=390,664 --force-device-scale-factor=2 \
+//          --virtual-time-budget=12000 --screenshot=out.png \
+//          "http://localhost:5173/tools/screenshot.html?scene=combat"
+// ---------------------------------------------------------------------------
+(function () {
+  var qs = new URLSearchParams(location.search);
+  var scene = qs.get('scene') || 'combat';
+  var frames = Number(qs.get('frames') || 0);
+  var freezeAfter = qs.get('freeze') === '0' ? 0 : 900;   // ms after the overlay opens
+  var OVERLAY = { map: 'map', hub: null, event: 'event', sector: 'sector', ship: 'ship', store: 'store' };
+
+  function freeze(keepOverlay) {
+    var G = window.G;
+    G.App.paused = true;
+    G.View.frame = function () {};   // keep the last painted canvas on screen
+    G.UI.update = function () {};
+    var tips = document.querySelectorAll('.tip');
+    for (var i = 0; i < tips.length; i++) tips[i].remove();
+    // coach bubbles are non-modal overlays: drop everything when the shot wants no panel
+    if (!keepOverlay) {
+      var ov = document.getElementById('overlays');
+      if (ov) ov.innerHTML = '';
+    }
+  }
+
+  function setup(G, run) {
+    if (scene === 'combat') {
+      G.Run.startCombat(run, { faction: 'rebel', elite: true });
+      G.App.sync();
+      G.App.paused = false;
+      var n = run.player.weapons.length;
+      for (var i = 0; i < n; i++) G.Ship.toggleWeapon(run.player, i);
+      for (var j = 0; j < n; j++) {
+        G.Combat.setTarget(run, j, j % 2 === 0 ? 0 : Math.min(1, run.combat.enemy.rooms.length - 1));
+      }
+      run.player.hullMax = 30; run.player.hull = 21;        // land the frame mid-fight, not mid-explosion
+      run.combat.enemy.hullMax = 40; run.combat.enemy.hull = 26;
+      return 0;
+    }
+    // everything below needs a plump, plausible mid-run state
+    run.res.fuel = 9; run.res.scrap = 143; run.res.missiles = 12;
+    run.sector.beacons[run.sector.start].visited = true;
+    run.mode = 'hub';
+    G.App.sync();
+    return OVERLAY[scene] || 0;
+  }
+
+  function boot() {
+    var G = window.G;
+    G.Save.loadSettings = function () {
+      return { sound: false, vibrate: false, speed: 1, autoPause: false, crisisPause: false, tips: false };
+    };
+    G.Save.save = function () { return true; };
+    G.Save.saveMeta = function () {};
+    G.Audio.setEnabled(false);
+
+    if (scene === 'title') { G.App.quitToTitle(true); return setTimeout(function () { freeze(true); }, freezeAfter); }
+
+    G.App.newRun({ seed: 20260927, shipId: 'falcon', difficulty: 'normal' });
+    var run = G.App.run;
+    run.sectorIndex = 2;
+    run.sector = G.Map.generate(run, 2, 'hostile');
+    run.at = run.sector.start;
+
+    var overlay = setup(G, run);
+    var total = frames || (scene === 'combat' ? 640 : 60);
+    for (var k = 0; k < total; k++) {
+      try { G.App._frame(1 / 60); } catch (e) { console.error(e); break; }
+    }
+    if (overlay) { G.UI.open(overlay); G.UI.refresh(); }
+    setTimeout(function () { freeze(!!overlay); }, overlay ? freezeAfter : 0);
+    if (qs.has('measure')) setTimeout(report, 1500);
+  }
+
+  function report() {
+    var view = document.getElementById('view');
+    var host = view.querySelector('mv') || view;
+    var lines = ['WINDOW ' + window.innerWidth + 'x' + window.innerHeight,
+                 'VIEW ' + JSON.stringify(view.getBoundingClientRect()),
+                 'SCROLL ' + host.scrollHeight + '/' + host.clientHeight];
+    var kids = host.children;
+    for (var i = 0; i < kids.length; i++) {
+      var r = kids[i].getBoundingClientRect();
+      lines.push(kids[i].className + '  y=' + Math.round(r.top) + '..' + Math.round(r.bottom));
+    }
+    var sys = host.querySelector('.mv-sys');
+    if (sys) {
+      var c = sys.children;
+      for (var j = 0; j < c.length; j++) {
+        var b = c[j].getBoundingClientRect();
+        lines.push('  .' + c[j].className + '  y=' + Math.round(b.top) + '..' + Math.round(b.bottom) +
+                   '  x=' + Math.round(b.left) + '..' + Math.round(b.right));
+      }
+    }
+    var pre = document.createElement('pre');
+    pre.id = 'measure-out';
+    pre.textContent = lines.join('\n');
+    document.body.appendChild(pre);
+  }
+
+  window.addEventListener('load', function () { setTimeout(boot, 400); });
+})();
+</script>
+</body>
+</html>

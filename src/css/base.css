@@ -1,0 +1,257 @@
+/* ============================================================================
+   Base theme + shared components. view.css (main ship view / HUD) and
+   screens.css (overlays) build on these tokens and classes.
+   Single deliberate dark "deep space bridge" look; not theme-switched.
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --bg: #090d1b;
+  --bg-2: #0f1630;
+  --panel: #131b34;
+  --panel-2: #1a2646;
+  --panel-3: #22315a;
+  --line: #2f4170;
+  --line-hi: #58719f;
+  --scrim: rgba(4, 7, 16, 0.72);
+
+  /* text */
+  --text: #e6ecf8;
+  --text-dim: #97a6c6;
+  --text-faint: #5d6c8f;
+
+  /* semantic game colors */
+  --accent: #ffb547;        /* selection, primary actions ("signal amber") */
+  --accent-ink: #1d1405;
+  --power: #62e07e;         /* reactor / power bars */
+  --power-dim: #24452f;
+  --shield: #52c6ff;
+  --ion: #9d88ff;
+  --hull-ok: #6fd36a;
+  --hull-mid: #f2c94c;
+  --hull-low: #ff5d5d;
+  --danger: #ff5d5d;
+  --warn: #ffb547;
+  --fire: #ff8a3d;
+  --oxygen-low: #ff6f91;
+  --scrap: #f3c64d;
+  --fuel: #ff9f43;
+  --missile: #d7def0;
+  --blue-opt: #6ec1ff;      /* event choices unlocked by crew / equipment */
+  --good: #6fd36a;
+
+  /* type */
+  --font-ui: 'Chakra Petch', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --font-title: 'ZCOOL QingKe HuangYou', 'Chakra Petch', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --fs-xs: 12px;            /* numbers / Latin only; Chinese text uses >= --fs-s */
+  --fs-s: 12.5px;
+  --fs-m: 14px;
+  --fs-l: 16px;
+  --fs-xl: 20px;
+  --fs-xxl: 28px;
+
+  /* geometry */
+  --gap: 8px;
+  --pad: 12px;
+  --bevel: 8px;             /* cut corner size for panels */
+  --tap: 44px;              /* minimum touch target */
+}
+
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-m);
+  line-height: 1.45;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input, select { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+#app {
+  position: relative;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 60% at 50% 0%, #16204a 0%, transparent 60%),
+    radial-gradient(90% 50% at 50% 100%, #111a3a 0%, transparent 70%),
+    var(--bg);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 481px) {
+  #app { box-shadow: 0 0 0 1px var(--line), 0 0 60px rgba(0, 0, 0, 0.6); }
+}
+
+/* Standalone build: we own the whole screen, so keep content clear of the notch/home bar.
+   (Inside a claude.ai Artifact the host already pads :root by the safe-area insets, and there
+   is no .standalone class.) */
+#view { position: absolute; inset: 0; touch-action: none; }
+.standalone #view {
+  top: env(safe-area-inset-top, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+#overlays { position: absolute; inset: 0; pointer-events: none; }
+.standalone #overlays {
+  top: env(safe-area-inset-top, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+#toasts {
+  position: absolute; left: 0; right: 0; top: 56px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  pointer-events: none; z-index: 50;
+}
+.standalone #toasts { top: calc(env(safe-area-inset-top, 0px) + 56px); }
+
+/* ---------- overlay shell (G.UI.open) ---------- */
+.overlay {
+  position: absolute; inset: 0;
+  pointer-events: auto;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  background: var(--scrim);
+  animation: ov-in 160ms ease-out;
+}
+.overlay.center { justify-content: center; padding: 16px; }
+.overlay.full { background: var(--bg); justify-content: flex-start; }
+.overlay.clear { background: transparent; pointer-events: none; }
+.overlay.clear > * { pointer-events: auto; }
+@keyframes ov-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* bottom sheet: default container for modal screens */
+.sheet {
+  position: relative;
+  max-height: 90%;
+  display: flex; flex-direction: column;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border-top: 1px solid var(--line-hi);
+  clip-path: polygon(var(--bevel) 0, calc(100% - var(--bevel)) 0, 100% var(--bevel), 100% 100%, 0 100%, 0 var(--bevel));
+  animation: sheet-in 200ms cubic-bezier(.2, .8, .2, 1);
+}
+@keyframes sheet-in { from { transform: translateY(24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.sheet-head {
+  display: flex; align-items: center; gap: var(--gap);
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.sheet-title { font-size: var(--fs-l); font-weight: 700; letter-spacing: 0.04em; flex: 1; }
+.sheet-body { overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 12px 16px; flex: 1; min-height: 0; }
+.sheet-foot {
+  display: flex; gap: var(--gap); padding: 10px 16px 14px;
+  border-top: 1px solid var(--line);
+}
+.sheet-foot > .btn { flex: 1; }
+
+/* ---------- panel ---------- */
+.panel {
+  position: relative;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  box-shadow: inset 0 0 0 1px var(--line);
+  clip-path: polygon(var(--bevel) 0, 100% 0, 100% calc(100% - var(--bevel)), calc(100% - var(--bevel)) 100%, 0 100%, 0 var(--bevel));
+  padding: var(--pad);
+}
+.panel.hi { box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ---------- buttons ---------- */
+.btn {
+  appearance: none; border: 0; cursor: pointer;
+  min-height: var(--tap); padding: 0 16px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-weight: 600; font-size: var(--fs-m); letter-spacing: 0.03em;
+  color: var(--text);
+  background: var(--panel-3);
+  box-shadow: inset 0 0 0 1px var(--line-hi);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  transition: filter 120ms, transform 80ms;
+}
+.btn:active { transform: translateY(1px); filter: brightness(1.15); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+.btn.danger { background: #5a1f28; box-shadow: inset 0 0 0 1px var(--danger); color: #ffd9dc; }
+.btn.ghost { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+/* .btn.small: secondary actions inside sheets only, never on the main view */
+.btn.small { min-height: 36px; padding: 0 10px; font-size: var(--fs-s); }
+.btn:disabled, .btn.disabled { opacity: 0.4; pointer-events: none; }
+.btn.icon { width: var(--tap); padding: 0; }
+
+/* ---------- chips / resources ---------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; min-height: 24px;
+  font-size: var(--fs-s); font-weight: 600;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.chip.good { color: var(--good); box-shadow: inset 0 0 0 1px rgba(111, 211, 106, 0.4); }
+.chip.bad { color: var(--danger); box-shadow: inset 0 0 0 1px rgba(255, 93, 93, 0.4); }
+.res-scrap { color: var(--scrap); }
+.res-fuel { color: var(--fuel); }
+.res-missiles { color: var(--missile); }
+.res-hull { color: var(--hull-ok); }
+
+.ico { width: 1em; height: 1em; display: inline-block; vertical-align: -0.12em; flex: none; }
+.ico svg { width: 100%; height: 100%; display: block; }
+
+/* ---------- text helpers ---------- */
+.dim { color: var(--text-dim); }
+.faint { color: var(--text-faint); }
+.label {
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.title-font { font-family: var(--font-title); letter-spacing: 0.06em; }
+.blue { color: var(--blue-opt); }
+.warn { color: var(--warn); }
+.danger { color: var(--danger); }
+.good { color: var(--good); }
+.row { display: flex; align-items: center; gap: var(--gap); }
+.col { display: flex; flex-direction: column; gap: var(--gap); }
+.grow { flex: 1; min-width: 0; }
+.wrap { flex-wrap: wrap; }
+
+/* ---------- toast ---------- */
+.toast {
+  max-width: 86%;
+  padding: 8px 14px;
+  background: rgba(19, 27, 52, 0.95);
+  box-shadow: inset 0 0 0 1px var(--line-hi), 0 6px 24px rgba(0, 0, 0, 0.5);
+  font-size: var(--fs-s);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  animation: toast-in 180ms ease-out;
+}
+.toast.warn { box-shadow: inset 0 0 0 1px var(--warn); color: #ffe2b0; }
+.toast.bad { box-shadow: inset 0 0 0 1px var(--danger); color: #ffd0d4; }
+.toast.good { box-shadow: inset 0 0 0 1px var(--good); color: #d6ffd2; }
+.toast.out { opacity: 0; transition: opacity 250ms; }
+@keyframes toast-in { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------- confirm dialog (G.UI.confirm) ---------- */
+.dialog { width: 100%; max-width: 360px; margin: 0 auto; }
+.dialog .panel { padding: 18px 16px 14px; }
+.dialog h3 { margin: 0 0 6px; font-size: var(--fs-l); }
+.dialog p { margin: 0 0 14px; color: var(--text-dim); }
+.dialog .row > .btn { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Collapse every animation to one near-instant pass (never ~1000 loops/s strobe);
+     static colour-state classes (.hot/.low/.hurt) still convey the state. */
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
