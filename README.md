@@ -21,7 +21,13 @@
 
 ## 立刻开玩
 
-**方式一：直接打开（推荐）**
+**方式一：在线直接玩（推荐）**
+
+> ### ▶ [https://1gp-studio.github.io/LightspeedEscape/](https://1gp-studio.github.io/LightspeedEscape/)
+
+手机浏览器打开即可，竖屏单手玩。每次 `main` 分支推送后由 GitHub Actions 自动重新构建并发布。
+
+**方式二：本地单文件**
 
 ```
 dist/lightspeed.html
@@ -29,14 +35,14 @@ dist/lightspeed.html
 
 单文件、自包含，双击即可在任何手机/桌面浏览器中运行（离线可用，唯一的外部请求是 Google Fonts）。
 
-**方式二：本地开发服务器**
+**方式三：本地开发服务器**
 
 ```bash
 node serve.mjs          # http://localhost:5173
 PORT=8080 node serve.mjs
 ```
 
-**方式三：重新构建产物**
+**方式四：重新构建产物**
 
 ```bash
 node build.mjs          # 读取 index.html 的 <script>/<link> 顺序，产出 dist/*.html

@@ -1,0 +1,73 @@
+name: Deploy playable build to GitHub Pages
+
+# Publishes the single-file standalone build (dist/lightspeed.html) as the site root,
+# so https://1gp-studio.github.io/LightspeedEscape/ is always the current main branch.
+#
+# `enablement: true` on actions/configure-pages lets the workflow turn GitHub Pages on
+# by itself (build_type = workflow) the first time it runs — no manual settings visit.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify the bundle inlines cleanly
+        run: node build.mjs
+
+      - name: Assemble site
+        run: |
+          set -e
+          mkdir -p _site/assets
+          cp dist/lightspeed.html _site/index.html
+          cp assets/cover.png assets/banner.png _site/assets/
+          cp assets/screenshot-*.png _site/assets/
+          # serve the committed bytes untouched
+          touch _site/.nojekyll
+
+      - name: Sanity-check the published entry point
+        run: |
+          test -s _site/index.html
+          grep -q 'id="app"' _site/index.html
+          echo "entry point OK: $(wc -c < _site/index.html) bytes"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
