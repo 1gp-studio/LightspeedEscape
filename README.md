@@ -6,7 +6,7 @@
 
 [![Deploy playable build](https://github.com/1gp-studio/LightspeedEscape/actions/workflows/pages.yml/badge.svg)](https://github.com/1gp-studio/LightspeedEscape/actions/workflows/pages.yml)
 
-一款**竖屏、单手可玩、触摸优先**的太空生存 Roguelike——向 *FTL: Faster Than Light* 致敬的轻量原创作品。
+一款**竖屏、单手可玩、触摸优先**的太空生存 Roguelike，灵感来自 *FTL: Faster Than Light*。
 带着情报穿越 5 个星区，躲开身后一寸寸逼近的叛军舰队，最终击毁叛军旗舰。一局 20–30 分钟。
 
 零运行时依赖、无打包器、无 `npm install`。整个游戏是 37 个 JS 文件构成的 IIFE 集合，挂在一个全局命名空间 `G` 上。
@@ -23,44 +23,20 @@
 
 ## 立刻开玩
 
-**方式一：在线直接玩（推荐）**
+**在线玩**
 
 > ### ▶ [https://1gp-studio.github.io/LightspeedEscape/](https://1gp-studio.github.io/LightspeedEscape/)
 
 手机浏览器打开即可，竖屏单手玩。每次 `main` 分支推送后由 GitHub Actions 自动重新构建并发布。
 
-> **首次开通需要一次网页点击**：GitHub 不允许工作流给自己创建 Pages 站点（属仓库管理操作，
-> 自动 token 永远无权执行），因此需要在 [Settings → Pages](https://github.com/1gp-studio/LightspeedEscape/settings/pages)
-> 把 **Build and deployment → Source** 设为 `GitHub Actions` 并保存。此后全自动。
-
-**方式二：同局域网手机直接玩**
+**本地运行**
 
 ```bash
-node serve.mjs
+node serve.mjs          # http://localhost:5173，手机连同一 Wi-Fi 访问 http://<电脑IP>:5173/
+node build.mjs          # 重新构建单文件产物 dist/lightspeed.html
 ```
 
-手机连同一个 Wi-Fi，浏览器打开 `http://<电脑的局域网 IP>:5173/`。
-
-**方式三：本地单文件**
-
-```
-dist/lightspeed.html
-```
-
-单文件、自包含，双击即可在任何手机/桌面浏览器中运行（离线可用，唯一的外部请求是 Google Fonts）。
-
-**方式四：本地开发服务器**
-
-```bash
-node serve.mjs          # http://localhost:5173
-PORT=8080 node serve.mjs
-```
-
-**方式五：重新构建产物**
-
-```bash
-node build.mjs          # 读取 index.html 的 <script>/<link> 顺序，产出 dist/*.html
-```
+`dist/lightspeed.html` 是自包含单文件，直接用浏览器打开也能玩。
 
 ---
 
@@ -131,19 +107,3 @@ node serve.mjs                        # 本地预览
 - **纯净查询**：`can*` / `*State` / `*Info` / `preview*` 一类的函数绝不掷骰、绝不改状态。
 - **移动端优先**：固定 1/30s 物理步长，canvas DPR 上限 2，目标中端手机 60fps；支持 360×560 / 360×640 / 390×664 / 390×763 / 430×932 等真实视口，宽屏折叠为居中 480px 列。
 - **界面文案全中文**，数字与拉丁字母使用 Chakra Petch，标题使用 ZCOOL 青科黄油体。
-
-### 开发辅助页
-
-`tools/` 下两个页面需要经 `node serve.mjs` 访问：
-
-```
-http://localhost:5173/tools/screenshot.html?scene=combat   # 定种开局并定格一帧，用于截图
-http://localhost:5173/tools/cover.html                     # 把标题字型合成到插图上，用于产出封面
-```
-
----
-
-## 版权与致谢
-
-- 本作是 *FTL: Faster Than Light* 的**致敬作品**，与 Subset Games 无任何关联，也未使用其任何文本、名称或美术素材。所有飞船名、种族、事件文案与图像均为原创。
-- 代码与美术版权归本项目作者所有。
