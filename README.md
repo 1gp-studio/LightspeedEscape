@@ -4,6 +4,8 @@
 
 # 光速逃亡 · Lightspeed Escape
 
+[![Deploy playable build](https://github.com/1gp-studio/LightspeedEscape/actions/workflows/pages.yml/badge.svg)](https://github.com/1gp-studio/LightspeedEscape/actions/workflows/pages.yml)
+
 一款**竖屏、单手可玩、触摸优先**的太空生存 Roguelike——向 *FTL: Faster Than Light* 致敬的轻量原创作品。
 带着情报穿越 5 个星区，躲开身后一寸寸逼近的叛军舰队，最终击毁叛军旗舰。一局 20–30 分钟。
 
@@ -27,7 +29,19 @@
 
 手机浏览器打开即可，竖屏单手玩。每次 `main` 分支推送后由 GitHub Actions 自动重新构建并发布。
 
-**方式二：本地单文件**
+> **首次开通需要一次网页点击**：GitHub 不允许工作流给自己创建 Pages 站点（属仓库管理操作，
+> 自动 token 永远无权执行），因此需要在 [Settings → Pages](https://github.com/1gp-studio/LightspeedEscape/settings/pages)
+> 把 **Build and deployment → Source** 设为 `GitHub Actions` 并保存。此后全自动。
+
+**方式二：同局域网手机直接玩**
+
+```bash
+node serve.mjs
+```
+
+手机连同一个 Wi-Fi，浏览器打开 `http://<电脑的局域网 IP>:5173/`。
+
+**方式三：本地单文件**
 
 ```
 dist/lightspeed.html
@@ -35,14 +49,14 @@ dist/lightspeed.html
 
 单文件、自包含，双击即可在任何手机/桌面浏览器中运行（离线可用，唯一的外部请求是 Google Fonts）。
 
-**方式三：本地开发服务器**
+**方式四：本地开发服务器**
 
 ```bash
 node serve.mjs          # http://localhost:5173
 PORT=8080 node serve.mjs
 ```
 
-**方式四：重新构建产物**
+**方式五：重新构建产物**
 
 ```bash
 node build.mjs          # 读取 index.html 的 <script>/<link> 顺序，产出 dist/*.html

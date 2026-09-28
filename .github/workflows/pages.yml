@@ -1,10 +1,18 @@
 name: Deploy playable build to GitHub Pages
 
-# Publishes the single-file standalone build (dist/lightspeed.html) as the site root,
-# so https://1gp-studio.github.io/LightspeedEscape/ is always the current main branch.
+# Publishes the single-file standalone build (dist/lightspeed.html) as the site root, so
+# https://1gp-studio.github.io/LightspeedEscape/ always mirrors the current main branch.
 #
-# `enablement: true` on actions/configure-pages lets the workflow turn GitHub Pages on
-# by itself (build_type = workflow) the first time it runs — no manual settings visit.
+# ONE-TIME SETUP (unavoidable, by GitHub's design):
+# creating a Pages *site* is a repository-administration call, and the workflow's automatic
+# GITHUB_TOKEN can never administer the repository it runs in — so `enablement: true` below
+# cannot succeed in CI. Somebody with admin rights has to flip the source once:
+#
+#     https://github.com/1gp-studio/LightspeedEscape/settings/pages
+#     → Build and deployment → Source = "GitHub Actions" → Save
+#
+# Until then this workflow stays green, prints that instruction into the run summary, and
+# skips the deploy instead of failing. After the switch it deploys on every push to main.
 
 on:
   push:
@@ -23,6 +31,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      pages_ready: ${{ steps.pages.outcome == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +42,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Verify the bundle inlines cleanly
+      - name: Build single-file bundle
         run: node build.mjs
 
       - name: Assemble site
@@ -42,27 +52,49 @@ jobs:
           cp dist/lightspeed.html _site/index.html
           cp assets/cover.png assets/banner.png _site/assets/
           cp assets/screenshot-*.png _site/assets/
-          # serve the committed bytes untouched
-          touch _site/.nojekyll
+          touch _site/.nojekyll      # serve the committed bytes untouched
 
       - name: Sanity-check the published entry point
         run: |
+          set -e
           test -s _site/index.html
           grep -q 'id="app"' _site/index.html
           echo "entry point OK: $(wc -c < _site/index.html) bytes"
 
       - name: Configure Pages
+        id: pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
+        continue-on-error: true
+
+      - name: Explain the one-time switch when Pages is still off
+        if: steps.pages.outcome != 'success'
+        run: |
+          {
+            echo "## 还差一次网页点击，链接才会生效"
+            echo
+            echo "GitHub 不允许工作流给自己创建 Pages 站点：这属于仓库管理操作，"
+            echo "自动发放的 \`GITHUB_TOKEN\` 按设计永远无权执行（所以 \`enablement: true\` 在 CI 里必然失败）。"
+            echo
+            echo "1. 打开 https://github.com/${{ github.repository }}/settings/pages"
+            echo "2. **Build and deployment → Source** 选 \`GitHub Actions\`，点 **Save**"
+            echo "3. 回到本页点 **Re-run all jobs**"
+            echo
+            echo "之后每次 push 到 main 都会自动重新构建并发布，无需再手动操作。"
+            echo
+            echo "站点地址：https://1gp-studio.github.io/LightspeedEscape/"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifact
+        if: steps.pages.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
     needs: build
+    if: needs.build.outputs.pages_ready == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
