@@ -36,7 +36,7 @@ test('works with no localStorage at all', () => {
   assert.equal(G.Save.has(), false);
   G.Save.clear();
   assert.equal(JSON.stringify(G.Save.loadSettings()),
-    JSON.stringify({ sound: true, vibrate: true, speed: 1, autoPause: true, crisisPause: true, tips: true }));
+    JSON.stringify({ sound: true, music: true, vibrate: true, speed: 1, autoPause: true, crisisPause: true, tips: true }));
   assert.equal(JSON.stringify(G.Save.loadMeta()), JSON.stringify({ runs: 0, wins: 0, bestSector: 0, tipsSeen: {} }));
   assert.equal(G.Save.saveSettings({ sound: false }), false);
 });
@@ -147,7 +147,7 @@ test('settings / meta: defaults, merge, type checks, unknown keys kept', () => {
     s.speed = 1.25;
     assert.equal(G.Save.saveSettings(s), true);
     assert.equal(JSON.stringify(G.Save.loadSettings()),
-      JSON.stringify({ sound: false, vibrate: true, speed: 1.25, autoPause: true, crisisPause: true, tips: true }));
+      JSON.stringify({ sound: false, music: true, vibrate: true, speed: 1.25, autoPause: true, crisisPause: true, tips: true }));
     ls.setItem(G.CFG.SETTINGS_KEY, JSON.stringify({ sound: 'yes', tips: false, extra: 7 }));
     const s2 = G.Save.loadSettings();
     assert.equal(s2.sound, true, 'wrong type -> default');

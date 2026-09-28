@@ -219,6 +219,7 @@
     App.meta = G.Save.loadMeta();
     if (!App.meta.tipsSeen) App.meta.tipsSeen = {};
     if (audio() && audio().setEnabled) { try { audio().setEnabled(!!App.settings.sound); } catch (e) { /* ignore */ } }
+    if (audio() && audio().setMusic) { try { audio().setMusic(App.settings.music !== false); } catch (e) { /* ignore */ } }
 
     var view = document.getElementById('view');
     G.View.init(view);

@@ -81,6 +81,7 @@
   function persist(s) {
     G.Save.saveSettings(s);
     if (G.Audio) G.Audio.setEnabled(!!s.sound);
+    if (G.Audio && G.Audio.setMusic) G.Audio.setMusic(s.music !== false);
   }
 
   function toggleRow(s, key, label, desc, entry) {
@@ -106,7 +107,8 @@
     var s = S().settings(), body = entry.state.body;
     G.dom.clear(body);
     body.appendChild(S().section('声音与反馈'));
-    body.appendChild(toggleRow(s, 'sound', '音效', null, entry));
+    body.appendChild(toggleRow(s, 'sound', '声音', '关闭后音效和音乐都静音', entry));
+    body.appendChild(toggleRow(s, 'music', '背景音乐', null, entry));
     body.appendChild(toggleRow(s, 'vibrate', '震动', '船体被击中时震动（需设备支持）', entry));
     body.appendChild(S().section('战斗'));
     body.appendChild(h('div.set-row.static',

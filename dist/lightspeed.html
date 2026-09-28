@@ -6768,7 +6768,7 @@ button, input, select { font: inherit; color: inherit; }
   var G = globalThis.G;
 
   var MODES = ['event', 'hub', 'combat', 'reward', 'sectorSelect', 'gameover', 'victory'];
-  var SETTINGS = { sound: true, vibrate: true, speed: 1, autoPause: true, crisisPause: true, tips: true };
+  var SETTINGS = { sound: true, music: true, vibrate: true, speed: 1, autoPause: true, crisisPause: true, tips: true };
   var META = { runs: 0, wins: 0, bestSector: 0, tipsSeen: {} };
 
   // ------------------------------------------------------------------ storage (guarded)
@@ -7266,7 +7266,8 @@ button, input, select { font: inherit; color: inherit; }
 // context is resumed from the next gesture; resume() is never attempted from the rAF fx loop.
 //   G.Audio.play(name, vol?)   name ∈ SOUNDS; the same sound plays at most once per THROTTLE_MS
 //   G.Audio.fx(ev)             maps an FxEvent (run._fx) to a sound
-//   G.Audio.setEnabled(bool)   settings.sound
+//   G.Audio.setEnabled(bool)   settings.sound (master: effects + music)
+//   G.Audio.setMusic(bool)     settings.music (background music only)
 (function () {
   'use strict';
   var G = globalThis.G;
@@ -7520,6 +7521,128 @@ button, input, select { font: inherit; color: inherit; }
     }
   }
 
+
+  // ------------------------------------------------------------------ background music
+  // Procedural chiptune BGM (no files). Four looping pieces chosen from the game state and crossfaded:
+  //   title  - slow A-minor pad + triangle arpeggio
+  //   calm   - hub / map / events / shops: D-minor pad, sparse arpeggio, soft bass
+  //   combat - E-minor, driving bass, square 16th arpeggio, kick + hat
+  //   boss   - C-minor, faster, heavier bass, snare backbeat (rebel flagship)
+  // A look-ahead scheduler (setInterval, UI layer only) queues notes ~0.25 s ahead on the AudioContext clock.
+  var MUSIC_VOL = 0.55;                 // relative to MASTER
+  var musicOn = true, musicBus = null, musicTimer = null, curMode = null, modeBus = {};
+  var seq = null;                        // { mode, step, next }
+  function midi(n) { return 440 * Math.pow(2, (n - 69) / 12); }
+  var SONGS = {
+    title:  { bpm: 76,  steps: 8,  chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], arp: [0, 1, 2, 1, 2, 1, 0, 1], arpOct: 12, arpWave: 'triangle', arpVol: 0.05, bass: [0, -1, -1, -1, 0, -1, -1, -1], bassVol: 0.07, pad: 0.035, drums: null },
+    calm:   { bpm: 84,  steps: 8,  chords: [[50, 53, 57], [46, 50, 53], [53, 57, 60], [48, 52, 55]], arp: [0, -1, 2, -1, 1, -1, 2, 0], arpOct: 24, arpWave: 'triangle', arpVol: 0.045, bass: [0, -1, -1, 0, -1, -1, 0, -1], bassVol: 0.07, pad: 0.03, drums: null },
+    combat: { bpm: 128, steps: 16, chords: [[52, 55, 59], [48, 52, 55], [50, 54, 57], [47, 51, 54]], arp: [0, 1, 2, 1, 0, 1, 2, 3, 0, 1, 2, 1, 0, 2, 1, 3], arpOct: 24, arpWave: 'square', arpVol: 0.022, bass: [0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 12, 0, 0, 12, 0, 12], bassVol: 0.08, pad: 0.018, drums: { kick: [0, 4, 8, 12], hat: [2, 6, 10, 14], snare: [] } },
+    boss:   { bpm: 142, steps: 16, chords: [[48, 51, 55], [44, 48, 51], [46, 50, 53], [43, 47, 50]], arp: [0, 2, 1, 3, 0, 2, 1, 3, 0, 2, 1, 3, 2, 1, 0, 3], arpOct: 24, arpWave: 'square', arpVol: 0.024, bass: [0, 0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 12, 0, 12, 7, 12], bassVol: 0.09, pad: 0.02, drums: { kick: [0, 3, 8, 11], hat: [2, 6, 10, 14], snare: [4, 12] } },
+  };
+
+  function musicReady() { return ctx && enabled && musicOn && ctx.state === 'running'; }
+
+  function busFor(mode) {
+    if (!musicBus) { musicBus = ctx.createGain(); musicBus.gain.value = MUSIC_VOL; musicBus.connect(master); }
+    if (!modeBus[mode]) { var g = ctx.createGain(); g.gain.value = 0.0001; g.connect(musicBus); modeBus[mode] = g; }
+    return modeBus[mode];
+  }
+
+  function note(out, wave, freq, t, dur, vol, attack, cutoff) {
+    var o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = wave; o.frequency.setValueAtTime(freq, t);
+    var a = attack || 0.005;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + a);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    if (cutoff) {
+      var f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff;
+      o.connect(f); f.connect(g);
+    } else o.connect(g);
+    g.connect(out);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  function drum(out, kind, t) {
+    if (kind === 'kick') {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+      g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.2);
+      return;
+    }
+    var src = ctx.createBufferSource(); src.buffer = noiseBuf;
+    var f = ctx.createBiquadFilter(), ng = ctx.createGain();
+    f.type = kind === 'hat' ? 'highpass' : 'bandpass';
+    f.frequency.value = kind === 'hat' ? 7000 : 1800;
+    var d = kind === 'hat' ? 0.04 : 0.14;
+    ng.gain.setValueAtTime(kind === 'hat' ? 0.035 : 0.09, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    src.connect(f); f.connect(ng); ng.connect(out);
+    src.start(t, Math.random() * 1.2, d + 0.02);
+  }
+
+  // One sequencer step of the current song at time t; returns the step length.
+  function playStep(song, out, step, t) {
+    var sp = 60 / song.bpm / (song.steps === 16 ? 4 : 2);         // 16ths or 8ths
+    var bar = Math.floor(step / song.steps) % song.chords.length, i = step % song.steps;
+    var ch = song.chords[bar];
+    if (i === 0) ch.forEach(function (n) {                          // pad: whole-bar chord, slow attack
+      note(out, 'sawtooth', midi(n), t, sp * song.steps * 0.98, song.pad, 0.35, 900);
+      note(out, 'triangle', midi(n + 12) * 1.003, t, sp * song.steps * 0.98, song.pad * 0.7, 0.35);
+    });
+    var a = song.arp[i];
+    if (a >= 0) note(out, song.arpWave, midi(ch[a % ch.length] + song.arpOct + (a >= ch.length ? 12 : 0)), t, sp * 0.9, song.arpVol, 0.004, song.arpWave === 'square' ? 2600 : 0);
+    var b = song.bass[i];
+    if (b >= 0) note(out, 'triangle', midi(ch[0] - 24 + b), t, sp * 1.8, song.bassVol, 0.004);
+    if (song.drums) ['kick', 'hat', 'snare'].forEach(function (k) { if (song.drums[k].indexOf(i) >= 0) drum(out, k, t); });
+    return sp;
+  }
+
+  // Which piece fits the current screen.
+  function wantMode() {
+    var A = G.App, r = A && A.run;
+    if (!r || (G.UI && (G.UI.isOpen('title') || G.UI.isOpen('newgame')))) return 'title';
+    if (r.mode === 'gameover' || r.mode === 'victory') return null;          // end screens play their stinger
+    if (r.mode === 'combat' && r.combat) return r.combat.boss ? 'boss' : 'combat';
+    return 'calm';
+  }
+
+  function fadeTo(g, v, now, secs) {
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(Math.max(0.0001, g.value), now);
+    g.linearRampToValueAtTime(v, now + secs);
+  }
+
+  function musicTick() {
+    if (!musicReady()) return;
+    var want = wantMode();
+    if (want !== curMode) {
+      var now = ctx.currentTime;
+      if (curMode) fadeTo(busFor(curMode).gain, 0.0001, now, 1.2);
+      if (want) fadeTo(busFor(want).gain, 1, now, 1.5);
+      curMode = want;
+      seq = want ? { mode: want, step: 0, next: now + 0.1 } : null;
+    }
+    if (!seq) return;
+    var song = SONGS[seq.mode], out = busFor(seq.mode);
+    if (seq.next < ctx.currentTime - 0.1) seq.next = ctx.currentTime + 0.05;   // tab was throttled: skip, don't burst
+    while (seq.next < ctx.currentTime + 0.25) {
+      seq.next += playStep(song, out, seq.step, seq.next);
+      seq.step++;
+    }
+  }
+
+  function startMusicTimer() {
+    if (musicTimer || typeof setInterval === 'undefined') return;
+    musicTimer = setInterval(function () { try { musicTick(); } catch (e) { /* never let music break the game */ } }, 60);
+  }
+
+  function setMusic(on) {
+    musicOn = !!on;
+    if (!ctx || !musicBus) return;
+    fadeTo(musicBus.gain, musicOn ? MUSIC_VOL : 0.0001, ctx.currentTime, 0.4);
+    if (!musicOn) { curMode = null; seq = null; }
+  }
+
   function setEnabled(on) {
     enabled = !!on;
     if (!ctx && enabled && gesture()) unlock();   // turned on from the settings toggle (a gesture)
@@ -7543,8 +7666,12 @@ button, input, select { font: inherit; color: inherit; }
     });
   }
 
+  startMusicTimer();
+
   G.Audio = {
     unlock: unlock,
+    setMusic: setMusic,
+    musicMode: function () { return curMode; },
     play: play,
     fx: fx,
     setEnabled: setEnabled,
@@ -12450,6 +12577,7 @@ button, input, select { font: inherit; color: inherit; }
   function persist(s) {
     G.Save.saveSettings(s);
     if (G.Audio) G.Audio.setEnabled(!!s.sound);
+    if (G.Audio && G.Audio.setMusic) G.Audio.setMusic(s.music !== false);
   }
 
   function toggleRow(s, key, label, desc, entry) {
@@ -12475,7 +12603,8 @@ button, input, select { font: inherit; color: inherit; }
     var s = S().settings(), body = entry.state.body;
     G.dom.clear(body);
     body.appendChild(S().section('声音与反馈'));
-    body.appendChild(toggleRow(s, 'sound', '音效', null, entry));
+    body.appendChild(toggleRow(s, 'sound', '声音', '关闭后音效和音乐都静音', entry));
+    body.appendChild(toggleRow(s, 'music', '背景音乐', null, entry));
     body.appendChild(toggleRow(s, 'vibrate', '震动', '船体被击中时震动（需设备支持）', entry));
     body.appendChild(S().section('战斗'));
     body.appendChild(h('div.set-row.static',
@@ -12770,6 +12899,7 @@ button, input, select { font: inherit; color: inherit; }
     App.meta = G.Save.loadMeta();
     if (!App.meta.tipsSeen) App.meta.tipsSeen = {};
     if (audio() && audio().setEnabled) { try { audio().setEnabled(!!App.settings.sound); } catch (e) { /* ignore */ } }
+    if (audio() && audio().setMusic) { try { audio().setMusic(App.settings.music !== false); } catch (e) { /* ignore */ } }
 
     var view = document.getElementById('view');
     G.View.init(view);

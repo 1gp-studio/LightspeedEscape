@@ -6,7 +6,7 @@
   var G = globalThis.G;
 
   var MODES = ['event', 'hub', 'combat', 'reward', 'sectorSelect', 'gameover', 'victory'];
-  var SETTINGS = { sound: true, vibrate: true, speed: 1, autoPause: true, crisisPause: true, tips: true };
+  var SETTINGS = { sound: true, music: true, vibrate: true, speed: 1, autoPause: true, crisisPause: true, tips: true };
   var META = { runs: 0, wins: 0, bestSector: 0, tipsSeen: {} };
 
   // ------------------------------------------------------------------ storage (guarded)
