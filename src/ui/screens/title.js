@@ -22,6 +22,39 @@
 
   var localSettings = null, localMeta = null;
 
+  // 12x12 crew busts (ART.md crew palettes). o outline, s race colour, d race shade, l highlight,
+  // h hair, e eyes / visor, u uniform, b badge.
+  var PORTRAIT = {
+    human: ['....oooo....', '...ohhhho...', '..ohhhhhho..', '..olssssso..', '..oseesseo..', '..osssssdo..',
+            '...osssdo...', '....osdo....', '..ouuuuuuo..', '.ouuubuuuuo.', '.ouuuuuuuuo.', '.ouuuuuuuuo.'],
+    engi: ['..oooooooo..', '..ollsssso..', '..osssssso..', '..oeeeeeeo..', '..osssssdo..', '..oddddddo..',
+           '....oddo....', '..oooooooo..', '..ouuuuuuo..', '.ouuuuuuuuo.', '.ouuubuuuuo.', '.ouuuuuuuuo.'],
+    rock: ['.oooooooooo.', 'ossllsssddso', 'ossssssssddo', 'oseesssseedo', 'osssssssssdo', 'odsssssssddo',
+           '.oddddddddo.', '..oooooooo..', '.oddssssddo.', 'odssslsssddo', 'osssssssssdo', 'odssssssssdo'],
+    swift: ['.....oo.....', '....olso....', '...olssso...', '...oesseo...', '...osssdo...', '....osdo....',
+            '.....oo.....', '...ouuuuo...', '..ouuuuuuo..', '..ouubuuuo..', '..ouuuuuuo..', '..ouuuuuuo..'],
+  };
+  var PORTRAIT_PAL = {
+    human: { h: '#5a3a22', e: '#10162a', u: '#3b5b9a', b: '#e5b64c', l: '#ffe3cc', d: '#c98f6b' },
+    engi: { e: '#d8f3ff', u: '#2c374f', b: '#62e07e', l: '#c8fff2', d: '#3e9c8a' },
+    rock: { e: '#ffd166', u: '#8a5a3a', b: '#e5b64c', l: '#f0c39a', d: '#8a5a3a' },
+    swift: { e: '#10162a', u: '#2f5a3a', b: '#e5b64c', l: '#e8ffc0', d: '#7fa446' },
+  };
+  function portraitSvg(raceId, color) {
+    var rows = PORTRAIT[raceId] || PORTRAIT.human, pal = PORTRAIT_PAL[raceId] || PORTRAIT_PAL.human;
+    var out = ['<svg viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true">'];
+    for (var y = 0; y < 12; y++) {
+      for (var x = 0; x < 12; x++) {
+        var c = rows[y].charAt(x);
+        if (c === '.' || !c) continue;
+        var fill = c === 'o' ? '#05070e' : c === 's' ? color : pal[c] || color;
+        out.push('<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + fill + '"/>');
+      }
+    }
+    out.push('</svg>');
+    return out.join('');
+  }
+
   var S = {
     RES: RES, TYPE_ICON: TYPE_ICON, TYPE_NAME: TYPE_NAME,
 
@@ -153,37 +186,76 @@
       if (r.fireImmune) t.push('免疫火焰');
       return t.join(' · ');
     },
+    // Crew portrait: a 12x12 pixel bust per race (crisp SVG rects) + optional name-initial badge.
     crewDot: function (raceId, label) {
       var r = G.data.crew.races[raceId];
-      return h('span.crew-dot', { style: { background: r ? r.color : '#ccc' } }, label || '');
+      var el = h('span.crew-dot.race-' + (PORTRAIT[raceId] ? raceId : 'human'), { style: { '--race': r ? r.color : '#ccc' } });
+      var art = h('span.crew-art');
+      art.innerHTML = portraitSvg(raceId, r ? r.color : '#cccccc');
+      el.appendChild(art);
+      if (label) el.appendChild(h('span.crew-dot-lbl', label));
+      return el;
     },
     section: function (title, extra) {
       return h('div.sec-label', h('span', title), extra || null);
     },
 
-    // Animated starfield on a canvas that fills `host` (cosmetic; Math.random allowed in ui).
-    // Returns stop(). opts.warp: 0..1 streak intensity.
+    // Pixel starfield (ART.md: 1 art px = 2 CSS px): stars fall past a nose-up ship on a low-res buffer that
+    // CSS upscales with image-rendering: pixelated, over a dithered nebula blob. Cosmetic; Math.random allowed.
+    // Returns stop(). opts: { count, warp: 0..1 speed / streak length, tint: 'blue' | 'red' | 'gold' }.
     starfield: function (host, opts) {
       opts = opts || {};
+      var ART = 2;
       var cv = h('canvas.starfield', { 'aria-hidden': 'true' });
       host.insertBefore(cv, host.firstChild);
       var cx = cv.getContext && cv.getContext('2d');
       if (!cx) return function () {};
-      var stars = [], W = 0, H = 0, dpr = 1, raf = 0, prev = 0, alive = true;
+      var NEB = {
+        blue: ['#0d1330', '#141d45', '#1d2a5e'],
+        red: ['#1a0d1a', '#2a1224', '#3b1830'],
+        gold: ['#16142a', '#231d38', '#352a3e'],
+      }[opts.tint || 'blue'];
+      var TONES = ['#34406a', '#7d8bb3', '#e6ecf8'];
+      var HUES = ['#ffd08a', '#8cc8ff'];
+      var BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+      var stars = [], W = 0, H = 0, raf = 0, prev = 0, alive = true, clock = 0, neb = null;
       var reduce = globalThis.matchMedia && globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var warp = opts.warp == null ? 0.35 : opts.warp;
+      function nebula() {
+        neb = document.createElement('canvas');
+        neb.width = W; neb.height = H;
+        var nx = neb.getContext('2d');
+        if (!nx) { neb = null; return; }
+        var blobs = [[0.22, 0.26, 0.4], [0.8, 0.18, 0.28], [0.66, 0.8, 0.34]];
+        var R = Math.max(W, H);
+        for (var y = 0; y < H; y++) {
+          for (var x = 0; x < W; x++) {
+            var d = 0;
+            for (var b = 0; b < blobs.length; b++) {
+              var dx = (x - blobs[b][0] * W) / (blobs[b][2] * R), dy = (y - blobs[b][1] * H) / (blobs[b][2] * R * 0.8);
+              d += Math.exp(-(dx * dx + dy * dy) * 2.4);
+            }
+            var lv = Math.min(2.99, d * 2.1);
+            var tone = Math.floor(lv) + ((lv % 1) * 16 > BAYER[(y & 3) * 4 + (x & 3)] ? 1 : 0);   // 4x4 ordered dither
+            if (tone <= 0) continue;
+            nx.fillStyle = NEB[Math.min(2, tone - 1)];
+            nx.fillRect(x, y, 1, 1);
+          }
+        }
+      }
       function resize() {
         var r = cv.getBoundingClientRect();
-        dpr = Math.min(2, globalThis.devicePixelRatio || 1);
-        W = Math.max(1, r.width); H = Math.max(1, r.height);
-        cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+        W = Math.max(1, Math.ceil(r.width / ART)); H = Math.max(1, Math.ceil(r.height / ART));
+        cv.width = W; cv.height = H;
+        cx.imageSmoothingEnabled = false;
+        nebula();
       }
       function spawn(s, fresh) {
-        s.a = Math.random() * Math.PI * 2;
-        s.d = fresh ? Math.random() * 1.2 : Math.random() * 0.05;
-        s.v = 0.02 + Math.random() * 0.07;
-        s.z = Math.random();
-        s.tw = Math.random() * 6;
-        s.hue = Math.random() < 0.15 ? 'rgba(255,196,120,' : (Math.random() < 0.3 ? 'rgba(140,200,255,' : 'rgba(230,236,248,');
+        s.x = Math.random();
+        s.y = fresh ? Math.random() : -0.02;
+        s.z = Math.random() < 0.55 ? 0 : Math.random() < 0.65 ? 1 : 2;   // depth layer: far / mid / near
+        s.tw = Math.random() * 4;
+        s.hue = s.z === 2 && Math.random() < 0.35 ? HUES[Math.random() < 0.5 ? 0 : 1] : null;
         return s;
       }
       for (var i = 0; i < (opts.count || 150); i++) stars.push(spawn({}, true));
@@ -191,40 +263,169 @@
         if (!alive) return;
         var dt = prev ? Math.min(0.05, (ts - prev) / 1000) : 0.016;
         prev = ts;
-        if (!W || cv.width !== Math.round(W * dpr)) resize();
-        cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        var r = cv.getBoundingClientRect();
+        if (!W || W !== Math.max(1, Math.ceil(r.width / ART)) || H !== Math.max(1, Math.ceil(r.height / ART))) resize();
+        if (!reduce) clock += dt;
         cx.clearRect(0, 0, W, H);
-        var ox = W / 2, oy = H * (opts.cy || 0.36), R = Math.max(W, H) * 0.75;
-        if (opts.centerEl) {
-          var cr = opts.centerEl.getBoundingClientRect(), hr = cv.getBoundingClientRect();
-          if (cr.height) { ox = cr.left - hr.left + cr.width / 2; oy = cr.top - hr.top + cr.height / 2; }
-        }
-        var warp = opts.warp || 0.35;
+        if (neb) cx.drawImage(neb, 0, 0);
+        var spd = 0.02 + warp * 0.12;
         for (var k = 0; k < stars.length; k++) {
           var s = stars[k];
-          if (!reduce) { s.d += s.v * dt * (0.3 + s.d * 1.6); s.tw += dt * 2; }
-          if (s.d > 1.25) spawn(s, false);
-          var dx = Math.cos(s.a), dy = Math.sin(s.a);
-          var x = ox + dx * s.d * R, y = oy + dy * s.d * R;
-          var alpha = Math.min(1, s.d * 3) * (0.55 + 0.45 * Math.sin(s.tw)) * (0.4 + 0.6 * s.z);
-          var len = warp * s.d * s.d * 26 * (0.5 + s.z);
-          cx.strokeStyle = s.hue + alpha.toFixed(3) + ')';
-          cx.lineWidth = 0.6 + s.z * 1.1;
-          cx.beginPath();
-          cx.moveTo(x, y);
-          cx.lineTo(x - dx * (len + 0.6), y - dy * (len + 0.6));
-          cx.stroke();
+          if (!reduce) s.y += spd * (0.35 + s.z * 0.9) * dt * (1 + s.z);
+          if (s.y > 1.02) spawn(s, false);
+          var x = Math.floor(s.x * W), y = Math.floor(s.y * H);
+          // stepped twinkle: stars drop one tone now and then, never a smooth fade
+          var lv = s.z;
+          if (s.z < 2 && Math.floor(clock * 3 + s.tw) % 4 === 0) lv = Math.max(0, lv - 1);
+          var len = Math.floor(warp * s.z * s.z * 3);
+          if (len > 0) {
+            cx.fillStyle = TONES[Math.max(0, lv - 1)];
+            cx.fillRect(x, y - len, 1, len);
+          }
+          cx.fillStyle = s.hue || TONES[lv];
+          cx.fillRect(x, y, 1, 1);
+          if (s.z === 2 && !s.hue && Math.floor(clock * 2 + s.tw) % 5 === 0) {   // occasional pixel sparkle cross
+            cx.fillStyle = TONES[1];
+            cx.fillRect(x - 1, y, 1, 1); cx.fillRect(x + 1, y, 1, 1); cx.fillRect(x, y - 1, 1, 1); cx.fillRect(x, y + 1, 1, 1);
+          }
         }
         raf = globalThis.requestAnimationFrame(frame);
       }
       raf = globalThis.requestAnimationFrame(frame);
-      var onResize = function () { W = 0; };
-      globalThis.addEventListener('resize', onResize);
       return function stop() {
         alive = false;
         globalThis.cancelAnimationFrame(raf);
-        globalThis.removeEventListener('resize', onResize);
       };
+    },
+
+    // Procedural pixel-art hero ship (title / end emblem): a mirrored steel hull built from a half-width
+    // profile, lit from the top-left (5 flat steel tones), panel seams, rivets, cyan cockpit, wing pods,
+    // amber hazard stripes and a 3-frame thruster flame. Drawn 1:1 into a small canvas that CSS upscales
+    // by an even integer (pixelated). opts: { wreck: bool }. Returns stop().
+    pixelShip: function (host, opts) {
+      opts = opts || {};
+      var cv = h('canvas.px-ship', { 'aria-hidden': 'true' });
+      host.appendChild(cv);
+      var cx = cv.getContext && cv.getContext('2d');
+      if (!cx) return function () {};
+      var GW = 37, GH = 50, C = 18;
+      var wreck = !!opts.wreck;
+      var STEEL = wreck ? ['#1a1016', '#311a22', '#4b2830', '#6c3c42', '#8d5a5c'] : ['#1b2233', '#2c374f', '#46546f', '#6f7f9c', '#a7b4cc'];
+      var OUT = '#05070e';
+      // ---- mask: 0 empty, 1 hull, 2 cockpit, 3 hazard stripe, 4 nozzle, 5 gun barrel
+      var m = [], y, x;
+      for (y = 0; y < GH; y++) { m.push([]); for (x = 0; x < GW; x++) m[y].push(0); }
+      function set(dx, yy, v) { var xx = C + dx; if (yy >= 0 && yy < GH && xx >= 0 && xx < GW) m[yy][xx] = v; }
+      function bodyHW(yy) {
+        if (yy < 1) return -1; if (yy < 3) return 0; if (yy < 5) return 1; if (yy < 7) return 2; if (yy < 10) return 3;
+        if (yy < 13) return 4; if (yy < 33) return 5; if (yy < 37) return 4; return -1;
+      }
+      for (y = 0; y < GH; y++) {
+        var bw = bodyHW(y);
+        for (x = -bw; x <= bw && bw >= 0; x++) set(x, y, 1);
+        if (y >= 18 && y <= 30) {                         // swept wings
+          var ww = Math.min(13, 5 + (y - 18));
+          for (x = 6; x <= ww; x++) { set(x, y, 1); set(-x, y, 1); }
+        }
+        if (y >= 20 && y <= 34) {                         // wing-tip pods
+          var x0 = y < 22 ? 15 : 14, x1 = y < 22 ? 15 : 16;
+          for (x = x0; x <= x1; x++) { set(x, y, 1); set(-x, y, 1); }
+          if (y >= 22) { set(13, y, 1); set(-13, y, 1); }
+        }
+      }
+      [[0, 6], [0, 7], [-1, 8], [0, 8], [1, 8], [-1, 9], [0, 9], [1, 9], [-1, 10], [0, 10], [1, 10]].forEach(function (p) { set(p[0], p[1], 2); });
+      for (x = 13; x <= 16; x++) { set(x, 25 + (x & 1), 3); set(-x, 25 + (x & 1), 3); }
+      for (x = 2; x <= 4; x++) { set(x, 37, 4); set(-x, 37, 4); }
+      for (x = 14; x <= 16; x++) { set(x, 35, 4); set(-x, 35, 4); }
+      for (y = 14; y <= 19; y++) { set(9, y, 5); set(-9, y, 5); }
+      if (wreck) {                                        // deterministic holes torn in the hull
+        [[3, 15], [4, 15], [3, 16], [-8, 24], [-9, 24], [-9, 25], [11, 27], [12, 27], [-2, 29], [-1, 29], [-2, 30]]
+          .forEach(function (p) { set(p[0], p[1], 0); });
+        for (y = 31; y < GH; y++) for (x = -17; x <= -12; x++) set(x, y, 0);
+      }
+      function at(xx, yy) { return yy < 0 || yy >= GH || xx < 0 || xx >= GW ? 0 : m[yy][xx]; }
+      // ---- static sprite
+      var spr = document.createElement('canvas');
+      spr.width = GW; spr.height = GH;
+      var sx = spr.getContext('2d');
+      if (!sx) return function () {};
+      function px(c, xx, yy) { sx.fillStyle = c; sx.fillRect(xx, yy, 1, 1); }
+      for (y = 0; y < GH; y++) {
+        for (x = 0; x < GW; x++) {
+          var v = m[y][x], dx = x - C;
+          if (!v) {
+            if (at(x - 1, y) || at(x + 1, y) || at(x, y - 1) || at(x, y + 1)) px(OUT, x, y);   // 1-px dark outline
+            continue;
+          }
+          if (v === 2) { px(y <= 7 || (dx < 0 && y <= 8) ? '#d8f3ff' : dx > 0 ? '#1f6f9a' : '#52c6ff', x, y); continue; }
+          if (v === 3) { px(wreck ? '#7a4a1c' : '#e5b64c', x, y); continue; }
+          if (v === 4) { px(dx < 0 ? '#46546f' : '#1b2233', x, y); continue; }
+          if (v === 5) { px(y === 14 ? '#a7b4cc' : dx < 0 ? '#6f7f9c' : '#2c374f', x, y); continue; }
+          var inBody = Math.abs(dx) <= 5;
+          var t = inBody ? dx / Math.max(1, bodyHW(y)) : (Math.abs(dx) >= 13 ? (dx < 0 ? (Math.abs(dx) >= 15 ? -0.2 : -0.8) : (Math.abs(dx) >= 15 ? 0.8 : 0.3)) : (dx < 0 ? -0.3 : 0.4));
+          var tone = t < -0.55 ? 4 : t < -0.05 ? 3 : t < 0.55 ? 2 : 1;
+          if (!at(x, y - 1)) tone = Math.min(4, tone + 1);          // lit top edge
+          if (!at(x, y + 1)) tone = Math.max(0, tone - 1);          // shaded bottom edge
+          if ((y === 16 || y === 23 || y === 30) && inBody) tone = Math.max(0, tone - 1);   // panel seams
+          if (dx === 0 && y > 12 && y < 33) tone = Math.max(0, tone - 1);                  // spine
+          if (Math.abs(dx) === 6 && y > 19 && y < 30) tone = Math.max(0, tone - 1);        // wing root seam
+          px(STEEL[tone], x, y);
+          if (Math.abs(dx) === 3 && y % 4 === 2 && y > 13 && y < 31) px(STEEL[Math.min(4, tone + 1)], x, y);   // rivets
+        }
+      }
+      if (!wreck) { px('#e5b64c', C - 4, 13); px('#c9832a', C - 4, 14); px('#c9832a', C + 4, 13); px('#8a5a1c', C + 4, 14); }
+
+      var FLAME = ['#ffffff', '#ffd166', '#ff8a3d', '#c2410c'];
+      var raf = 0, alive = true, prev = 0, clock = 0, scale = 0;
+      var reduce = globalThis.matchMedia && globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      cv.width = GW; cv.height = GH;
+      function fit() {
+        var r = host.getBoundingClientRect();
+        var s = 2;
+        [6, 4].some(function (k) { if (GW * k <= r.width - 16 && GH * k <= r.height - 8) { s = k; return true; } return false; });
+        if (s !== scale) { scale = s; cv.style.width = GW * s + 'px'; cv.style.height = GH * s + 'px'; }
+      }
+      function flame(xa, xb, y0, len, f) {
+        for (var xx = xa; xx <= xb; xx++) {
+          var edge = xx === xa || xx === xb;
+          var L = len - (edge ? 2 : 0) + ((xx + f) % 2);
+          for (var k = 0; k < L; k++) {
+            cx.fillStyle = FLAME[Math.min(3, Math.floor(k / Math.max(1, L) * 4) + (edge ? 1 : 0))];
+            cx.fillRect(xx, y0 + k, 1, 1);
+          }
+        }
+      }
+      function draw(ts) {
+        if (!alive) return;
+        var dt = prev ? Math.min(0.05, (ts - prev) / 1000) : 0.016;
+        prev = ts;
+        if (!reduce) clock += dt;
+        fit();
+        cx.clearRect(0, 0, GW, GH);
+        cx.drawImage(spr, 0, 0);
+        var f = Math.floor(clock * 10) % 3;   // 3-frame thruster flicker
+        if (!wreck) {
+          var len = [7, 9, 8][f];
+          flame(C - 4, C - 2, 38, len, f);
+          flame(C + 2, C + 4, 38, len, f + 1);
+          flame(C + 14, C + 16, 36, len - 3, f);
+          flame(C - 16, C - 14, 36, len - 3, f + 1);
+        } else {
+          var on = Math.floor(clock * 6) % 4;                 // blinking sparks at the tears
+          if (on < 2) {
+            cx.fillStyle = on === 0 ? '#ffd166' : '#ff8a3d';
+            cx.fillRect(C + 3, 14, 1, 1); cx.fillRect(C - 9, 23, 1, 1); cx.fillRect(C + 12, 26, 1, 1);
+          }
+          cx.fillStyle = '#4a4f60';                            // smoke pixels rising from the breach
+          for (var i = 0; i < 5; i++) {
+            var sy = 14 - Math.floor((clock * 4 + i * 3) % 14);
+            cx.fillRect(C + 3 + (i % 3) - 1, sy, 1, 1);
+          }
+        }
+        raf = globalThis.requestAnimationFrame(draw);
+      }
+      raf = globalThis.requestAnimationFrame(draw);
+      return function stop() { alive = false; globalThis.cancelAnimationFrame(raf); };
     },
 
     // Nose-up ship thumbnail. Uses G.Render.miniShip when available, else a simple room plan.
@@ -289,22 +490,27 @@
         h('div', h('b', meta.bestSector ? meta.bestSector + '/' + G.CFG.SECTORS : '—'), h('span', '最远星区'))
       );
 
-      var emblem = h('div.title-emblem', { 'aria-hidden': 'true' },
-        h('i.te-ring.r1'), h('i.te-ring.r2'), h('i.te-ring.r3'), h('span.te-ship', icon('ship')));
+      var emblem = h('div.title-emblem', { 'aria-hidden': 'true' }, h('i.te-bracket'), h('i.te-scan'));
       el.appendChild(h('div.title-wrap',
         h('div.title-top',
-          h('div.title-kicker', 'LIGHTSPEED · ESCAPE'),
-          h('h1.title-name', { 'data-text': G.TITLE }, G.TITLE),
-          h('div.title-warp'),
+          h('div.title-plate',
+            h('div.title-kicker', 'LIGHTSPEED · ESCAPE'),
+            h('h1.title-name', { 'data-text': G.TITLE }, G.TITLE),
+            h('div.title-warp', { 'aria-hidden': 'true' })
+          ),
           h('p.title-tag', G.TAGLINE),
           G.DEDICATION ? h('p.title-ded', icon('star'), G.DEDICATION) : null
         ),
         emblem,
         h('div.title-bottom', btns, stats, h('div.title-ver', 'v' + G.VERSION))
       ));
-      entry.state.stop = S.starfield(el, { count: 170, warp: 0.45, centerEl: emblem });
+      entry.state.stop = S.starfield(el, { count: 170, warp: 0.45, tint: 'blue' });
+      entry.state.stopShip = S.pixelShip(emblem, {});
     },
-    unmount: function (entry) { if (entry.state.stop) entry.state.stop(); },
+    unmount: function (entry) {
+      if (entry.state.stop) entry.state.stop();
+      if (entry.state.stopShip) entry.state.stopShip();
+    },
   });
 
   // ================================================================== newgame

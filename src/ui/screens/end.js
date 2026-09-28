@@ -22,8 +22,7 @@
 
       function stat(label, value) { return h('div.end-stat', h('b', String(value)), h('span', label)); }
 
-      var emblem = h('div.title-emblem.end-emblem', { 'aria-hidden': 'true' },
-        h('i.te-ring.r1'), h('i.te-ring.r2'), h('i.te-ring.r3'), h('span.te-ship', icon(win ? 'star' : 'skull')));
+      var emblem = h('div.title-emblem.end-emblem', { 'aria-hidden': 'true' }, h('i.te-bracket'));
       entry.el.appendChild(h('div.end-wrap',
         h('div.end-kicker', win ? 'MISSION COMPLETE' : 'SIGNAL LOST'),
         h('h1.end-title', win ? '胜利' : '航程终结'),
@@ -51,9 +50,13 @@
           h('button.btn.ghost.big', { onClick: function () { S().sfx('click'); S().toTitle(); } }, '返回标题')
         )
       ));
-      entry.state.stop = S().starfield(entry.el, { count: win ? 170 : 90, warp: win ? 0.6 : 0.1, centerEl: emblem });
+      entry.state.stop = S().starfield(entry.el, { count: win ? 170 : 90, warp: win ? 0.6 : 0.05, tint: win ? 'gold' : 'red' });
+      entry.state.stopShip = S().pixelShip(emblem, { wreck: !win });
       S().sfx(win ? 'victory' : 'defeat');
     },
-    unmount: function (entry) { if (entry.state.stop) entry.state.stop(); },
+    unmount: function (entry) {
+      if (entry.state.stop) entry.state.stop();
+      if (entry.state.stopShip) entry.state.stopShip();
+    },
   });
 })();

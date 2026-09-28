@@ -36,6 +36,15 @@
     return '<g transform="translate(' + (cx - s / 2) + ' ' + (cy - s / 2) + ') scale(' + k + ')">' + body + '</g>';
   }
 
+  // Pixel shapes (whole viewBox units so crispEdges lands them on the grid).
+  function sq(cls, cx, cy, hs) {
+    return '<rect class="' + cls + '" x="' + Math.round(cx - hs) + '" y="' + Math.round(cy - hs) + '" width="' + hs * 2 + '" height="' + hs * 2 + '"/>';
+  }
+  function diamond(cls, cx, cy, r) {
+    cx = Math.round(cx); cy = Math.round(cy);
+    return '<polygon class="' + cls + '" points="' + cx + ',' + (cy - r) + ' ' + (cx + r) + ',' + cy + ' ' + cx + ',' + (cy + r) + ' ' + (cx - r) + ',' + cy + '"/>';
+  }
+
   // What the player knows about a beacon.
   function known(run, b) {
     var hidden = G.Map.iconsHidden(run);
@@ -70,11 +79,13 @@
     var diff = G.data.rules.difficulty[run.difficulty] || G.data.rules.difficulty.normal;
     var speed = type.fleetSpeed * diff.fleetMult;
     var out = [];
-    out.push('<svg class="map-svg" viewBox="0 0 ' + W + ' ' + g.H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="星图">');
+    out.push('<svg class="map-svg" viewBox="0 0 ' + W + ' ' + g.H + '" preserveAspectRatio="xMidYMid meet" shape-rendering="crispEdges" role="img" aria-label="星图">');
+    // Pixel fills: a stair-stepped diagonal stripe for the overtaken zone and a 2x2 checker dither for its rim.
     out.push('<defs>' +
-      '<linearGradient id="mapFleet" x1="0" y1="1" x2="0" y2="0">' +
-      '<stop offset="0" stop-color="#ff3b4e" stop-opacity=".42"/><stop offset="1" stop-color="#ff3b4e" stop-opacity=".12"/></linearGradient>' +
-      '<radialGradient id="mapGlow"><stop offset="0" stop-color="#ffb547" stop-opacity=".55"/><stop offset="1" stop-color="#ffb547" stop-opacity="0"/></radialGradient>' +
+      '<pattern id="mapFleetStripe" width="8" height="8" patternUnits="userSpaceOnUse">' +
+      '<rect width="2" height="2" x="0" y="6"/><rect width="2" height="2" x="2" y="4"/><rect width="2" height="2" x="4" y="2"/><rect width="2" height="2" x="6" y="0"/></pattern>' +
+      '<pattern id="mapFleetDither" width="4" height="4" patternUnits="userSpaceOnUse">' +
+      '<rect width="2" height="2" x="0" y="0"/><rect width="2" height="2" x="2" y="2"/></pattern>' +
       '</defs>');
 
     // row guides
@@ -86,7 +97,9 @@
     var top = g.y(s.fleet) - R_B - 4;
     if (top < g.H) {
       var yTop = Math.max(0, top);
-      out.push('<rect class="map-fleet" x="-300" y="' + yTop + '" width="' + (W + 600) + '" height="' + (g.H - yTop + 300) + '" fill="url(#mapFleet)"/>');
+      out.push('<rect class="map-fleet" x="-300" y="' + yTop + '" width="' + (W + 600) + '" height="' + (g.H - yTop + 300) + '"/>');
+      out.push('<rect class="map-fleet-stripe" x="-296" y="' + (yTop + 12) + '" width="' + (W + 600) + '" height="' + Math.max(0, g.H - yTop + 288) + '" fill="url(#mapFleetStripe)"/>');
+      out.push('<rect class="map-fleet-dither" x="-300" y="' + yTop + '" width="' + (W + 600) + '" height="12" fill="url(#mapFleetDither)"/>');
       out.push('<line class="map-fleet-edge" x1="-300" x2="' + (W + 300) + '" y1="' + yTop + '" y2="' + yTop + '"/>');
       if (yTop > FS + 4) out.push('<text class="map-fleet-lbl" font-size="' + FS + '" x="' + (W - 6) + '" y="' + (yTop - 4) + '" text-anchor="end">叛军舰队</text>');
     }
@@ -121,10 +134,15 @@
       if (k.exit) cls.push('exit');
       if (st.sel === b.id) cls.push('sel');
       out.push('<g class="' + cls.join(' ') + '" data-id="' + b.id + '">');
-      if (here) out.push('<circle class="map-here-glow" cx="' + x + '" cy="' + y + '" r="24" fill="url(#mapGlow)"/>');
-      if (canGo) out.push('<circle class="map-reach-ring" cx="' + x + '" cy="' + y + '" r="' + (R_B + 5) + '"/>');
-      if (st.sel === b.id) out.push('<circle class="map-sel-ring" cx="' + x + '" cy="' + y + '" r="' + (R_B + 7) + '"/>');
-      out.push('<circle class="map-dot" cx="' + x + '" cy="' + y + '" r="' + R_B + '"/>');
+      if (here) {
+        out.push(sq('map-here-glow', x, y, R_B + 8));
+        out.push(sq('map-here-glow g2', x, y, R_B + 13));
+      }
+      if (canGo) out.push(sq('map-reach-ring', x, y, R_B + 5));
+      if (st.sel === b.id) out.push(sq('map-sel-ring', x, y, R_B + 7));
+      // square pixel beacons; the exit and the flagship are diamonds
+      if (k.exit || k.boss) out.push(diamond('map-dot', x, y, R_B + 3));
+      else out.push(sq('map-dot', x, y, R_B - 1));
       var gl = null, col = '#e6ecf8';
       if (here) { gl = 'ship'; col = '#1d1405'; }
       else if (k.boss) { gl = 'skull'; col = '#ff5d5d'; }
@@ -134,7 +152,7 @@
       if (gl) out.push(glyph(gl, x, y, 12, col));
       else if (b.visited) out.push(glyph('check', x, y, 10, '#9aa3b8'));
       var label = k.boss ? '旗舰' : k.exit ? '出口' : (k.store && !here ? '商店' : '');
-      if (label) out.push('<text class="map-lbl' + (k.boss ? ' boss' : '') + '" font-size="' + FS + '" x="' + x + '" y="' + (y - R_B - 6) + '" text-anchor="middle">' + label + '</text>');
+      if (label) out.push('<text class="map-lbl' + (k.boss ? ' boss' : '') + '" font-size="' + FS + '" x="' + x + '" y="' + (y - R_B - 8) + '" text-anchor="middle">' + label + '</text>');
       out.push('</g>');
     });
     out.push('</svg>');

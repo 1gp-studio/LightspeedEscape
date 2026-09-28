@@ -57,23 +57,116 @@
   function prop(el, k, v) { var c = '_p_' + k; if (el[c] !== v) { el[c] = v; el.style.setProperty(k, v); } }
   function dis(el, on) { on = !!on; if (el._d !== on) { el._d = on; el.classList.toggle('disabled', on); } }
 
+  // ------------------------------------------------------------------ pixel icons (ART.md: crisp HUD icons)
+  // Hand-drawn bitmaps for every icon the HUD uses: 12×12 (shown at 24px = 2px per art pixel) and 8×8 minis
+  // (shown at 16px). '#' = currentColor, '+' = currentColor at half strength, 'k' = outline dark, 'o' = flame.
+  // Rendered once into an SVG of 1×1 rects (shape-rendering: crispEdges); unknown names fall back to G.dom.icon.
+  var PX = {
+    shields: ['............', '.##########.', '.#........#.', '.#.++++++.#.', '.#.++++++.#.', '.#.++++++.#.',
+              '.#..++++..#.', '..#..++..#..', '..#......#..', '...#....#...', '....#..#....', '.....##.....'],
+    engines: ['............', '.....##.....', '....####....', '...######...', '..###..###..', '.###....###.',
+              '.....##.....', '....####....', '...######...', '..###..###..', '.###....###.', '............'],
+    weapons: ['.....##.....', '.....##.....', '...######...', '..##....##..', '.##......##.', '####.++.####',
+              '####.++.####', '.##......##.', '..##....##..', '...######...', '.....##.....', '.....##.....'],
+    oxygen: ['........##..', '.......#..#.', '.......#..#.', '........##..', '..###.......', '.#...#...##.',
+             '#.+...#.#..#', '#.....#.#..#', '#.....#..##.', '.#...#......', '..###.......', '............'],
+    medbay: ['............', '....####....', '....####....', '....####....', '.##########.', '.####++####.',
+             '.####++####.', '.##########.', '....####....', '....####....', '....####....', '............'],
+    piloting: ['...######...', '..#......#..', '.#........#.', '#..........#', '#...####...#', '#####++#####',
+               '#####++#####', '#...####...#', '#....##....#', '.#...##...#.', '..#..##..#..', '...######...'],
+    gear: ['....####....', '.##.####.##.', '.##########.', '..########..', '####....####', '###......###',
+           '###......###', '####....####', '..########..', '.##########.', '.##.####.##.', '....####....'],
+    jump: ['.....##.....', '....####....', '...######...', '..########..', '.##########.', '....####....',
+           '....####....', '....####....', '............', '..########..', '............', '...######...'],
+    pause: ['............', '..###..###..', '..###..###..', '..###..###..', '..###..###..', '..###..###..',
+            '..###..###..', '..###..###..', '..###..###..', '..###..###..', '..###..###..', '............'],
+    play: ['...#........', '...##.......', '...###......', '...####.....', '...#####....', '...######...',
+           '...######...', '...#####....', '...####.....', '...###......', '...##.......', '...#........'],
+    map: ['........###.', '........###.', '........###.', '.......+....', '..###.+.....', '..###+......',
+          '..###.......', '...+........', '..+.........', '###.........', '###.........', '###.........'],
+    ship: ['.....##.....', '....####....', '....#++#....', '....####....', '...######...', '..########..',
+           '.####++####.', '############', '##.######.##', '#...####...#', '....#..#....', '....o..o....'],
+    store: ['............', '....####....', '...#....#...', '...#....#...', '.##########.', '.##########.',
+            '.##+####+##.', '.##########.', '..########..', '..########..', '..########..', '............'],
+  };
+  var PX8 = {
+    hull: ['...##...', '..####..', '..#++#..', '..####..', '.######.', '########', '##.##.##', '.o....o.'],
+    scrap: ['..####..', '.######.', '###..###', '##....##', '##....##', '###..###', '.######.', '..####..'],
+    fuel: ['...##...', '...##...', '..####..', '.######.', '.#+#####', '.#+#####', '.######.', '..####..'],
+    missiles: ['...##...', '..####..', '..#++#..', '..####..', '..####..', '.######.', '##.##.##', '...oo...'],
+    shields: ['########', '#++++++#', '#++++++#', '#++++++#', '.#++++#.', '.#++++#.', '..#++#..', '...##...'],
+    engines: ['...##...', '..####..', '.##..##.', '#..##..#', '..####..', '.##..##.', '#......#', '........'],
+    weapons: ['...##...', '.######.', '.#....#.', '###++###', '###++###', '.#....#.', '.######.', '...##...'],
+    oxygen: ['.....##.', '....#..#', '....#..#', '.###.##.', '#+..#...', '#...#...', '#...#...', '.###....'],
+    medbay: ['..####..', '..####..', '########', '###++###', '###++###', '########', '..####..', '..####..'],
+    piloting: ['..####..', '.#....#.', '#..##..#', '####.###', '#..##..#', '#...#..#', '.#..#.#.', '..####..'],
+    // crew busts per race (tile portraits): 人类 round head, 机工族 boxy + antenna, 岩石族 wide, 迅影族 slim
+    c_human: ['..####..', '.######.', '.#k##k#.', '.######.', '..####..', '..++++..', '.++++++.', '.++++++.'],
+    c_engi: ['...#....', '.######.', '.#k##k#.', '.######.', '.######.', '..++++..', '.++++++.', '.+.++.+.'],
+    c_rock: ['.######.', '########', '#k####k#', '########', '.######.', '++++++++', '++++++++', '+++..+++'],
+    c_swift: ['.#....#.', '.##..##.', '..####..', '..k##k..', '..####..', '...++...', '..++++..', '..+..+..'],
+  };
+  var PX_INK = { '#': 'currentColor', '+': 'currentColor', k: '#05070e', o: '#ff9f43' };
+  var pxCache = {};
+  function pxSvg(rows) {
+    var n = rows.length, paths = {};
+    for (var y = 0; y < n; y++) {
+      var row = rows[y];
+      for (var x = 0; x < row.length;) {
+        var ch = row.charAt(x);
+        if (!PX_INK[ch]) { x++; continue; }
+        var x0 = x;
+        while (x < row.length && row.charAt(x) === ch) x++;
+        paths[ch] = (paths[ch] || '') + 'M' + x0 + ' ' + y + 'h' + (x - x0) + 'v1h' + (x0 - x) + 'z';
+      }
+    }
+    var body = '';
+    for (var k in paths) {
+      body += '<path d="' + paths[k] + '" fill="' + PX_INK[k] + '"' + (k === '+' ? ' fill-opacity="0.5"' : '') + '/>';
+    }
+    return '<svg viewBox="0 0 ' + n + ' ' + n + '" shape-rendering="crispEdges" aria-hidden="true">' + body + '</svg>';
+  }
+  // pxIcon(name, small): small = the 8×8 mini (16px) when one exists
+  function pxIcon(name, small) {
+    var set = small && PX8[name] ? PX8 : PX[name] ? PX : PX8[name] ? PX8 : null;
+    if (!set) return G.dom.icon(name);
+    var key = (set === PX8 ? '8:' : '12:') + name;
+    if (!pxCache[key]) pxCache[key] = pxSvg(set[name]);
+    var s = document.createElement('span');
+    s.className = 'ico pxi ' + (set === PX8 ? 'px8' : 'px12');
+    s.innerHTML = pxCache[key];
+    return s;
+  }
+
+  // Discrete block bar (hull): n blocks, block i lit while value covers it (ceil, so any hull left shows a block).
+  function blockRow(host, list, n) {
+    if (list.length === n) return list;
+    G.dom.clear(host);
+    list = [];
+    for (var i = 0; i < n; i++) { var el = G.dom.h('i'); host.appendChild(el); list.push(el); }
+    return list;
+  }
+  function paintBlocks(list, v, max) {
+    var n = list.length, lit = max > 0 ? Math.ceil(G.U.clamp(v / max, 0, 1) * n - 1e-6) : 0;
+    for (var i = 0; i < n; i++) cls(list[i], 'on', i < lit);
+  }
+
   // ------------------------------------------------------------------ build
   function build(root) {
-    var h = G.dom.h, icon = G.dom.icon;
+    var h = G.dom.h, icon = pxIcon;
     E.root = root;
     E.mv = h('div.mv.norun');
     E.canvas = h('canvas.mv-canvas');
 
     // 1. top bar
-    E.hullFill = h('i.hb-fill');
-    E.hullSeg = h('i.hb-seg');
+    E.hullBlocks = h('div.hb-track');
     E.hullNum = h('b');
     E.hullMaxT = h('small');
-    E.hull = h('div.tb-hull', icon('hull'), h('div.hb-track', E.hullFill, E.hullSeg), h('span.hb-txt', E.hullNum, E.hullMaxT));
+    E.hull = h('div.tb-hull', icon('hull', true), E.hullBlocks, h('span.hb-txt', E.hullNum, E.hullMaxT));
     E.scrap = h('b'); E.fuel = h('b'); E.missiles = h('b');
-    E.resScrap = h('div.tb-res.res-scrap', icon('scrap'), E.scrap);
-    E.resFuel = h('div.tb-res.res-fuel', icon('fuel'), E.fuel);
-    E.resMis = h('div.tb-res.res-missiles', icon('missiles'), E.missiles);
+    E.resScrap = h('div.tb-res.res-scrap', icon('scrap', true), E.scrap);
+    E.resFuel = h('div.tb-res.res-fuel', icon('fuel', true), E.fuel);
+    E.resMis = h('div.tb-res.res-missiles', icon('missiles', true), E.missiles);
     E.menu = h('button.mv-menu', { 'data-act': 'menu', 'aria-label': '菜单' }, icon('gear'));
     E.top = h('div.mv-top', E.hull, h('div.tb-resrow', E.resScrap, E.resFuel, E.resMis), E.menu);
 
@@ -82,11 +175,11 @@
     E.ezFac = h('span.ez-fac');
     E.ezShields = h('span.ez-sh');
     E.ezEva = h('span.ez-eva');
-    E.ezHullFill = h('i');
+    E.ezHullBar = h('span.ez-hbar');
     E.ezHullNum = h('span.ez-hn');
     E.ezHead = h('div.ez-head',
       h('div.ez-id', E.ezName, E.ezFac),
-      h('div.ez-st', E.ezShields, E.ezEva, h('span.ez-hull', h('span.ez-hbar', E.ezHullFill), E.ezHullNum)));
+      h('div.ez-st', E.ezShields, E.ezEva, h('span.ez-hull', E.ezHullBar, E.ezHullNum)));
     E.ezChips = h('div.ez-chips');
     E.ezVolley = h('span.ez-volley', '齐射');
     E.ezFtlFill = h('i');
@@ -203,6 +296,9 @@
     L.enemyZone = rel(E.enemy.getBoundingClientRect(), cr);
     L.playerZone = rel(E.player.getBoundingClientRect(), cr);
     L.ctxZone = rel(E.ctx.getBoundingClientRect(), cr);
+    // hull blocks: at most one per 4px of track (3px block + 1px gap) so narrow screens keep readable blocks
+    var hw = E.hullBlocks.clientWidth;
+    if (hw > 0) B.hullCap = Math.max(8, Math.floor((hw - 4 + 1) / 4));
     B.layoutKey = '';
     var realloc = !!(G.Render && G.Render.resize && G.Render.resize());
     computeLayout();
@@ -484,8 +580,8 @@
     var p = r.player, f = p.hull / p.hullMax;
     txt(E.hullNum, p.hull);
     txt(E.hullMaxT, '/' + p.hullMax);
-    bar(E.hullFill, f);
-    prop(E.hullSeg, '--seg', (100 / Math.max(1, p.hullMax)) + '%');
+    E.hullBl = blockRow(E.hullBlocks, E.hullBl || [], Math.max(1, Math.min(B.hullCap || 30, p.hullMax)));
+    paintBlocks(E.hullBl, p.hull, p.hullMax);
     hullClass(E.hull, f);
     txt(E.scrap, r.res.scrap);
     txt(E.fuel, r.res.fuel);
@@ -536,8 +632,9 @@
     }
     show(E.ezShields, cap > 0);
     txt(E.ezEva, '闪避 ' + G.Ship.evasion(e) + '%');
-    bar(E.ezHullFill, e.hull / e.hullMax);
-    hullClass(E.ezHullFill, e.hull / e.hullMax);
+    E.ezHullBl = blockRow(E.ezHullBar, E.ezHullBl || [], Math.max(1, Math.min(15, e.hullMax)));
+    paintBlocks(E.ezHullBl, e.hull, e.hullMax);
+    hullClass(E.ezHullBar, e.hull / e.hullMax);
     txt(E.ezHullNum, e.hull + '/' + e.hullMax);
     for (i = 0; i < E.ewc.length; i++) {
       var w = e.weapons[i], ch = E.ewc[i], f = w.charge / G.data.weapons[w.id].charge;
@@ -628,7 +725,7 @@
     QP_ORDER.forEach(function (sid) {
       var sys = e.systems[sid];
       if (!sys) return;
-      var el = h('button.qp', { 'data-act': 'qp', 'data-room': String(sys.room), 'aria-label': defs()[sid].name }, G.dom.icon(sid));
+      var el = h('button.qp', { 'data-act': 'qp', 'data-room': String(sys.room), 'aria-label': defs()[sid].name }, pxIcon(sid));
       E.cxwQp.appendChild(el);
       E.qp.push({ el: el, sys: sys });
     });
@@ -699,6 +796,10 @@
     } else if (mode === 'crew') {
       var cm = G.U.byId(p.crew, s.crewId), race = G.data.crew.races[cm.race];
       prop(E.cxcDisc, '--race', race.color);
+      if (E.cxcDisc._race !== cm.race) {
+        E.cxcDisc._race = cm.race;
+        G.dom.clear(E.cxcDisc).appendChild(pxIcon('c_' + (PX8['c_' + cm.race] ? cm.race : 'human')));
+      }
       txt(E.cxcName, cm.name);
       txt(E.cxcInfo, race.name);
       txt(E.cxcHp, 'HP ' + Math.ceil(cm.hp) + '/' + cm.hpMax);
@@ -708,7 +809,7 @@
       var sys = p.systems[s.sysId];
       if (B.cxsKey !== s.sysId) {
         B.cxsKey = s.sysId;
-        G.dom.clear(E.cxsIcon).appendChild(G.dom.icon(s.sysId));
+        G.dom.clear(E.cxsIcon).appendChild(pxIcon(s.sysId, true));
         txt(E.cxsName, defs()[s.sysId].name);
       }
       E.cxsPipList = pipRow(E.cxsPips, E.cxsPipList || [], sys.level);
@@ -740,7 +841,7 @@
       var race = G.data.crew.races[c.race] || G.data.crew.races.human;
       var t = { id: c.id, hp: h('i'), badge: h('b.cbadge') };
       t.el = h('div.ctile', { 'data-act': 'crew', 'data-id': c.id, 'aria-label': c.name, style: { '--race': race.color } },
-        h('i.cdisc'), t.badge, h('span.cn', c.name.slice(0, 2)), h('span.chp', t.hp));
+        h('i.cdisc', pxIcon('c_' + (PX8['c_' + c.race] ? c.race : 'human'))), t.badge, h('span.cn', c.name.slice(0, 2)), h('span.chp', t.hp));
       E.crewGrid.appendChild(t.el);
       return t;
     });
@@ -832,7 +933,7 @@
     var paused = !!(G.App && G.App.paused);
     if (E.pause._pz !== paused) {
       E.pause._pz = paused;
-      G.dom.clear(E.pause).appendChild(G.dom.icon(paused ? 'play' : 'pause'));
+      G.dom.clear(E.pause).appendChild(pxIcon(paused ? 'play' : 'pause'));
       E.pause.setAttribute('aria-label', paused ? '继续' : '暂停');
     }
     cls(E.pause, 'paused', paused);

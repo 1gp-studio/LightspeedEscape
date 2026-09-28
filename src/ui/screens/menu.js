@@ -76,7 +76,7 @@
   });
 
   // ------------------------------------------------------------------ settings
-  var SPEEDS = [0.75, 1, 1.25];
+  var SPEEDS = [0.75, 1, 1.5, 2];
 
   function persist(s) {
     G.Save.saveSettings(s);

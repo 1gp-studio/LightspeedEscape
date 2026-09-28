@@ -216,8 +216,8 @@ test('screens: settings persist and apply; menu abandon clears the save', async 
   assert.equal(G.Screens.settings().sound, false);
   assert.equal(G.Audio.isEnabled(), false);
   assert.equal(JSON.parse(store[G.CFG.SETTINGS_KEY]).sound, false);
-  click('.seg-btn', '×1.25');
-  assert.equal(JSON.parse(store[G.CFG.SETTINGS_KEY]).speed, 1.25);
+  click('.seg-btn', '×2');
+  assert.equal(JSON.parse(store[G.CFG.SETTINGS_KEY]).speed, 2);
   G.UI.close('settings');
   click('.menu-pair .btn', '玩法');
   assert.equal(env.all('.help-sec').length, G.data.text.help.length);
