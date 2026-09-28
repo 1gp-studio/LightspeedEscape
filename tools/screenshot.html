@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=ZCOOL+QingKe+HuangYou&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=ZCOOL+QingKe+HuangYou&display=swap">
 <link rel="stylesheet" href="/src/css/base.css">
 <link rel="stylesheet" href="/src/css/view.css">
 <link rel="stylesheet" href="/src/css/screens.css">
@@ -86,6 +86,8 @@
     G.App.paused = true;
     G.View.frame = function () {};   // keep the last painted canvas on screen
     G.UI.update = function () {};
+    if (G.Tips) G.Tips.reset();
+    if (G.UI.isOpen('tip')) G.UI.close('tip');
     var tips = document.querySelectorAll('.tip');
     for (var i = 0; i < tips.length; i++) tips[i].remove();
     // coach bubbles are non-modal overlays: drop everything when the shot wants no panel
@@ -125,6 +127,9 @@
     G.Save.save = function () { return true; };
     G.Save.saveMeta = function () {};
     G.Audio.setEnabled(false);
+    // main.js already loaded settings before this harness runs: switch coach tips off on the live object too
+    if (G.App.settings) G.App.settings.tips = false;
+    if (G.Tips) G.Tips.reset();
 
     if (scene === 'title') { G.App.quitToTitle(true); return setTimeout(function () { freeze(true); }, freezeAfter); }
 

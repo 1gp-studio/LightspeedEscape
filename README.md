@@ -84,7 +84,7 @@ src/ui/                     dom / input / render / view / audio / screens/*
 src/main.js                 应用胶水：定步长主循环、界面路由、自动存档
 
 tests/                      node:test 单元测试 + tests/bot.mjs 无头自动对局
-tools/                      开发辅助页（截图、封面合成），不参与构建
+tools/                      开发辅助页（截图、封面渲染），不参与构建
 assets/                     封面、横幅、截图
 dist/                       构建产物（已提交，可直接分发）
 ```
