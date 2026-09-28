@@ -511,6 +511,7 @@
 .rw-item { padding: 10px; background: var(--bg-2); box-shadow: 0 0 0 var(--px) var(--frame-out), inset 0 0 0 var(--px) var(--steel-2); margin: 2px; }
 .rw-item-lbl { display: flex; align-items: center; gap: 6px; font-size: var(--fs-s); color: var(--good); font-weight: 700; margin-bottom: 6px; }
 .rw-item-lbl::before { content: ''; width: 6px; height: 6px; background: var(--good); box-shadow: 0 0 0 var(--px) var(--frame-out); }
+.rw-hint { margin-top: 8px; padding: 8px 10px; font-size: var(--fs-s); line-height: 1.5; color: var(--warn); background: var(--bg-2); box-shadow: inset 0 0 0 var(--px) #6a4a1a; }
 .rw-panel > .btn { margin-top: 4px; }
 .offer-from { display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 6px 8px; background: var(--frame-out); box-shadow: inset 0 0 0 var(--px) var(--steel-1); }
 .offer-from .dim { font-weight: 600; font-size: var(--fs-s); margin-left: auto; }

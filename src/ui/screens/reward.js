@@ -28,7 +28,8 @@
       }
       if (rw.weapon && G.data.weapons[rw.weapon] && where !== 'scrap') {
         var wl = where === 'cargo' ? '新武器 · 已放入货舱' : where === 'slot' ? '新武器 · 已装入武器槽（未供能）' : '新武器';
-        extras.push(h('div.rw-item', h('div.rw-item-lbl', wl), S().weaponInfo(rw.weapon)));
+        var hint = (where === 'slot' || where === 'cargo') && G.Screens.weaponHint ? G.Screens.weaponHint(run, where, rw.weapon) : '';
+        extras.push(h('div.rw-item', h('div.rw-item-lbl', wl), S().weaponInfo(rw.weapon), hint ? h('div.rw-hint', hint) : null));
       }
       if (rw.crew) {
         var r = G.data.crew.races[rw.crew.race];

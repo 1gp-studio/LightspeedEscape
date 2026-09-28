@@ -34,6 +34,26 @@
     );
   }
 
+  // Plain-language next step for a newly acquired weapon (players new to the genre miss that weapons need
+  // power, weapon-system capacity and a slot). where: 'slot' | 'cargo'. Also used by the reward screen.
+  function weaponHint(run, where, id) {
+    if (where === 'cargo') return '已放入货舱：货舱里的武器不能开火，到「飞船 → 武器」把它装进武器槽。';
+    var p = run.player, slot = -1;
+    for (var i = p.weapons.length - 1; i >= 0; i--) if (p.weapons[i].id === id && !p.weapons[i].on) { slot = i; break; }
+    var why = slot >= 0 ? G.Ship.toggleBlock(p, slot) : '';
+    var def = G.data.weapons[id];
+    var ammo = def && def.missile && !run.res.missiles ? '另外它要消耗导弹，记得补充。' : '';
+    if (why === 'capacity') return '已装入武器槽，但武器系统容量不够给它供能：到「飞船 → 系统」升级武器系统，或战斗中先关掉一把旧武器。' + ammo;
+    if (why === 'reactor') return '已装入武器槽，但反应堆没有空余能量：战斗中先给其他系统减能量，再点这张武器卡通电。' + ammo;
+    return '已装入武器槽：战斗中点武器卡通电，再选敌舰舱室就会开火。' + ammo;
+  }
+  if (G.Screens) G.Screens.weaponHint = weaponHint;
+
+  function hasMissileWeapon(run) {
+    var all = run.player.weapons.map(function (w) { return w.id; }).concat(run.cargo);
+    return all.some(function (id) { return G.data.weapons[id] && G.data.weapons[id].missile > 0; });
+  }
+
   function buy(entry, key, qty) {
     var run = S().run();
     var it = G.Store.item(run, key);
@@ -45,7 +65,9 @@
       var c = run.player.crew[run.player.crew.length - 1];
       G.UI.toast('新船员 ' + c.name + ' 登船', 'good');
     } else if (it && it.type === 'weapon') {
-      G.UI.toast(it.name + (run.cargo.length > cargoBefore ? ' 已放入货舱' : ' 已装入武器槽（未供能）'), 'good');
+      G.UI.toast(it.name + ' ' + weaponHint(run, run.cargo.length > cargoBefore ? 'cargo' : 'slot', it.id), 'good', 5000);
+    } else if (it && it.type === 'missiles' && !hasMissileWeapon(run)) {
+      G.UI.toast('导弹是弹药：需要装备导弹类武器（如穿甲导弹）才能用上。', 'warn', 4500);
     } else if (it && it.type === 'augment') {
       G.UI.toast('已安装 ' + it.name, 'good');
     }

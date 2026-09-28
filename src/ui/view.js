@@ -874,7 +874,8 @@
     for (var i = 0; i < n; i++) {
       var w = p.weapons[i];
       if (!w) {
-        E.wCards.appendChild(h('div.wcard.empty', { 'data-act': 'wempty' }, h('span.wc-n', String(i + 1)), h('span.wc-empty', '空槽')));
+        E.wCards.appendChild(h('div.wcard.empty', { 'data-act': 'wempty' }, h('span.wc-n', String(i + 1)),
+          h('span.wc-empty', G.App && G.App.run && G.App.run.cargo.length ? '货舱有武器' : '空槽')));
         continue;
       }
       var def = G.data.weapons[w.id];
@@ -915,6 +916,11 @@
         // bottom-right badge: 无弹 > 选目标 (charged, no target) > target system > '单发' tag (missile weapons: one tap = one missile)
         var tg = '', tag = false;
         if (st.why === 'noMissiles') tg = '无弹';
+        else if (!w.on) {
+          // unpowered: say why it can't be switched on (new players don't know weapons need power + capacity)
+          var tb = G.Ship.toggleBlock(p, i);
+          tg = tb === 'capacity' ? '容量不足' : tb === 'reactor' ? '缺能量' : tb === 'broken' ? '已损坏' : '点击通电';
+        }
         else if (idle) tg = '选目标';
         else if (w.target != null && e.rooms[w.target]) {
           var rs = e.rooms[w.target].sys;

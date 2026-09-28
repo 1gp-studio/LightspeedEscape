@@ -1263,6 +1263,7 @@ button, input, select { font: inherit; color: inherit; }
 .rw-item { padding: 10px; background: var(--bg-2); box-shadow: 0 0 0 var(--px) var(--frame-out), inset 0 0 0 var(--px) var(--steel-2); margin: 2px; }
 .rw-item-lbl { display: flex; align-items: center; gap: 6px; font-size: var(--fs-s); color: var(--good); font-weight: 700; margin-bottom: 6px; }
 .rw-item-lbl::before { content: ''; width: 6px; height: 6px; background: var(--good); box-shadow: 0 0 0 var(--px) var(--frame-out); }
+.rw-hint { margin-top: 8px; padding: 8px 10px; font-size: var(--fs-s); line-height: 1.5; color: var(--warn); background: var(--bg-2); box-shadow: inset 0 0 0 var(--px) #6a4a1a; }
 .rw-panel > .btn { margin-top: 4px; }
 .offer-from { display: flex; align-items: center; gap: 8px; font-weight: 700; padding: 6px 8px; background: var(--frame-out); box-shadow: inset 0 0 0 var(--px) var(--steel-1); }
 .offer-from .dim { font-weight: 600; font-size: var(--fs-s); margin-left: auto; }
@@ -10184,7 +10185,8 @@ button, input, select { font: inherit; color: inherit; }
     for (var i = 0; i < n; i++) {
       var w = p.weapons[i];
       if (!w) {
-        E.wCards.appendChild(h('div.wcard.empty', { 'data-act': 'wempty' }, h('span.wc-n', String(i + 1)), h('span.wc-empty', '空槽')));
+        E.wCards.appendChild(h('div.wcard.empty', { 'data-act': 'wempty' }, h('span.wc-n', String(i + 1)),
+          h('span.wc-empty', G.App && G.App.run && G.App.run.cargo.length ? '货舱有武器' : '空槽')));
         continue;
       }
       var def = G.data.weapons[w.id];
@@ -10225,6 +10227,11 @@ button, input, select { font: inherit; color: inherit; }
         // bottom-right badge: 无弹 > 选目标 (charged, no target) > target system > '单发' tag (missile weapons: one tap = one missile)
         var tg = '', tag = false;
         if (st.why === 'noMissiles') tg = '无弹';
+        else if (!w.on) {
+          // unpowered: say why it can't be switched on (new players don't know weapons need power + capacity)
+          var tb = G.Ship.toggleBlock(p, i);
+          tg = tb === 'capacity' ? '容量不足' : tb === 'reactor' ? '缺能量' : tb === 'broken' ? '已损坏' : '点击通电';
+        }
         else if (idle) tg = '选目标';
         else if (w.target != null && e.rooms[w.target]) {
           var rs = e.rooms[w.target].sys;
@@ -11654,6 +11661,26 @@ button, input, select { font: inherit; color: inherit; }
     );
   }
 
+  // Plain-language next step for a newly acquired weapon (players new to the genre miss that weapons need
+  // power, weapon-system capacity and a slot). where: 'slot' | 'cargo'. Also used by the reward screen.
+  function weaponHint(run, where, id) {
+    if (where === 'cargo') return '已放入货舱：货舱里的武器不能开火，到「飞船 → 武器」把它装进武器槽。';
+    var p = run.player, slot = -1;
+    for (var i = p.weapons.length - 1; i >= 0; i--) if (p.weapons[i].id === id && !p.weapons[i].on) { slot = i; break; }
+    var why = slot >= 0 ? G.Ship.toggleBlock(p, slot) : '';
+    var def = G.data.weapons[id];
+    var ammo = def && def.missile && !run.res.missiles ? '另外它要消耗导弹，记得补充。' : '';
+    if (why === 'capacity') return '已装入武器槽，但武器系统容量不够给它供能：到「飞船 → 系统」升级武器系统，或战斗中先关掉一把旧武器。' + ammo;
+    if (why === 'reactor') return '已装入武器槽，但反应堆没有空余能量：战斗中先给其他系统减能量，再点这张武器卡通电。' + ammo;
+    return '已装入武器槽：战斗中点武器卡通电，再选敌舰舱室就会开火。' + ammo;
+  }
+  if (G.Screens) G.Screens.weaponHint = weaponHint;
+
+  function hasMissileWeapon(run) {
+    var all = run.player.weapons.map(function (w) { return w.id; }).concat(run.cargo);
+    return all.some(function (id) { return G.data.weapons[id] && G.data.weapons[id].missile > 0; });
+  }
+
   function buy(entry, key, qty) {
     var run = S().run();
     var it = G.Store.item(run, key);
@@ -11665,7 +11692,9 @@ button, input, select { font: inherit; color: inherit; }
       var c = run.player.crew[run.player.crew.length - 1];
       G.UI.toast('新船员 ' + c.name + ' 登船', 'good');
     } else if (it && it.type === 'weapon') {
-      G.UI.toast(it.name + (run.cargo.length > cargoBefore ? ' 已放入货舱' : ' 已装入武器槽（未供能）'), 'good');
+      G.UI.toast(it.name + ' ' + weaponHint(run, run.cargo.length > cargoBefore ? 'cargo' : 'slot', it.id), 'good', 5000);
+    } else if (it && it.type === 'missiles' && !hasMissileWeapon(run)) {
+      G.UI.toast('导弹是弹药：需要装备导弹类武器（如穿甲导弹）才能用上。', 'warn', 4500);
     } else if (it && it.type === 'augment') {
       G.UI.toast('已安装 ' + it.name, 'good');
     }
@@ -12068,7 +12097,8 @@ button, input, select { font: inherit; color: inherit; }
       }
       if (rw.weapon && G.data.weapons[rw.weapon] && where !== 'scrap') {
         var wl = where === 'cargo' ? '新武器 · 已放入货舱' : where === 'slot' ? '新武器 · 已装入武器槽（未供能）' : '新武器';
-        extras.push(h('div.rw-item', h('div.rw-item-lbl', wl), S().weaponInfo(rw.weapon)));
+        var hint = (where === 'slot' || where === 'cargo') && G.Screens.weaponHint ? G.Screens.weaponHint(run, where, rw.weapon) : '';
+        extras.push(h('div.rw-item', h('div.rw-item-lbl', wl), S().weaponInfo(rw.weapon), hint ? h('div.rw-hint', hint) : null));
       }
       if (rw.crew) {
         var r = G.data.crew.races[rw.crew.race];
