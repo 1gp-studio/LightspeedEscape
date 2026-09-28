@@ -661,3 +661,15 @@
 @media (prefers-reduced-motion: reduce) {
   .title-warp, .te-scan, .px-ship, .map-fleet-edge, .map-edge.live, .map-here-glow { animation: none !important; }
 }
+
+/* weapon comparison vs the best owned weapon of the same role (store / reward) */
+.overlay .wpn-cmp { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: var(--fs-s); font-weight: 700; }
+.overlay .wpn-arrow { width: 10px; height: 10px; flex: none; image-rendering: pixelated; }
+.overlay .wpn-cmp.up { color: var(--good); }
+.overlay .wpn-cmp.up .wpn-arrow { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 8px solid var(--good); }
+.overlay .wpn-cmp.down { color: var(--danger); }
+.overlay .wpn-cmp.down .wpn-arrow { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid var(--danger); }
+.overlay .wpn-cmp.same { color: var(--text-dim); }
+.overlay .wpn-cmp.same .wpn-arrow { height: 6px; background: linear-gradient(var(--text-dim) 0 33%, transparent 33% 66%, var(--text-dim) 66%); }
+.overlay .wpn-cmp.new { color: var(--blue-opt); }
+.overlay .wpn-cmp.new .wpn-arrow { width: 8px; height: 8px; background: var(--blue-opt); }

@@ -128,7 +128,7 @@
     list.forEach(function (it) {
       var sold = it.stock <= 0;
       out.push(h('div.st-card.st-flex' + (sold ? '.sold' : ''),
-        h('div.grow', S().weaponInfo(it.id)),
+        h('div.grow', S().weaponInfo(it.id, { compare: { run: run } })),
         buyBtn(run, entry, it.key, 1)
       ));
     });

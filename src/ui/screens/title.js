@@ -152,10 +152,39 @@
       return h('span.lvl-bar', { style: { '--n': max } }, segs);
     },
     // Weapon summary block (name, type, power, stats, desc).
+    // Role + effectiveness score used to compare a candidate weapon with what the player already owns.
+    // Roles: 激光 (laser), 离子 (ion), 导弹 (missile), 光束 (beam), 燃烧 (fire beam: its own role).
+    // Scores are "useful output per second": lasers/beams average the no-shield and 1-shield cases
+    // (a layer eats one laser shot / 1 beam damage), ions count ion stacks, missiles count damage.
+    weaponRole: function (d) { return d.type === 'beam' && !d.dmg ? 'fire' : d.type; },
+    weaponScore: function (d) {
+      if (d.type === 'laser') return (d.shots * d.dmg + (d.shots - 1) * d.dmg) / 2 / d.charge;
+      if (d.type === 'beam') return d.dmg ? (d.dmg * d.beamLen + Math.max(0, d.dmg - 1) * d.beamLen) / 2 / d.charge : d.beamLen / d.charge;
+      if (d.type === 'ion') return d.ion * d.shots / d.charge;
+      return d.dmg * d.shots * (1 + d.breach * 0.5 + d.fire * 0.5) / d.charge;
+    },
+    // Compare weapon id against the best owned weapon of the same role (equipped + cargo).
+    // exclude: drop one owned copy of this id (it was just acquired). Returns null when nothing comparable.
+    weaponCompare: function (run, id, exclude) {
+      var d = G.data.weapons[id];
+      if (!run || !d) return null;
+      var owned = run.player.weapons.map(function (w) { return w.id; }).concat(run.cargo || []);
+      if (exclude) { var k = owned.lastIndexOf(id); if (k >= 0) owned.splice(k, 1); }
+      var role = S.weaponRole(d), best = null;
+      owned.forEach(function (oid) {
+        var o = G.data.weapons[oid];
+        if (o && S.weaponRole(o) === role && (!best || S.weaponScore(o) > S.weaponScore(best))) best = o;
+      });
+      if (!best) return { dir: 'new', text: '新类型：你还没有' + ({ laser: '激光', ion: '离子', missile: '导弹', beam: '光束', fire: '燃烧' })[role] + '武器' };
+      var a = S.weaponScore(d), b = S.weaponScore(best);
+      if (best.id === d.id || Math.abs(a - b) <= b * 0.05) return { dir: 'same', text: '与你的' + best.name + ' 相当' };
+      return a > b ? { dir: 'up', text: '比你的' + best.name + ' 强' } : { dir: 'down', text: '不如你的' + best.name };
+    },
     weaponInfo: function (id, opts) {
       opts = opts || {};
       var d = G.data.weapons[id];
       if (!d) return h('div.wpn', '未知武器');
+      var cmp = opts.compare ? S.weaponCompare(opts.compare.run, id, opts.compare.exclude) : null;
       var stats = [];
       stats.push('充能 ' + d.charge + 's');
       if (d.type === 'beam') stats.push('扫 ' + d.beamLen + ' 舱 · 每舱 ' + d.dmg + ' 伤');
@@ -173,6 +202,7 @@
           h('span.wpn-pow', { title: '所需能量' }, S.pips(d.power, d.power, 'power'), h('small', d.power))
         ),
         h('div.wpn-stats', stats.join(' · ')),
+        cmp ? h('div.wpn-cmp.' + cmp.dir, h('span.wpn-arrow', { 'aria-hidden': 'true' }), cmp.text) : null,
         opts.desc === false ? null : h('div.wpn-desc', d.desc)
       );
     },
