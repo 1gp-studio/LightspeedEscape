@@ -12892,12 +12892,32 @@ button, input, select { font: inherit; color: inherit; }
     G.UI.update(frameDt);
   }
 
+  // ------------------------------------------------------------------ AI Made Games platform
+  // Inside the site's in-site player, report a one-line progress summary that shows as "your save"
+  // on the game page. Does nothing when the game runs anywhere else.
+  var platformEmbed = window.parent !== window, platformTimer = 0, platformLast = '';
+  function reportProgress() {
+    if (!platformEmbed || platformTimer) return;
+    platformTimer = setTimeout(function () {
+      platformTimer = 0;
+      var m = G.Save.loadMeta();
+      if (!m.runs && !m.bestSector) return;
+      var text = '最远到第 ' + (m.bestSector || 1) + ' 星区 · 通关 ' + (m.wins || 0) + ' 次';
+      if (text === platformLast) return;
+      platformLast = text;
+      try { window.parent.postMessage({ source: 'aimadegames', v: 1, type: 'progress', text: text }, '*'); } catch (e) { /* ignore */ }
+    }, 1500);
+  }
+
   // ------------------------------------------------------------------ boot
   App.boot = function () {
     App.settings = G.Save.loadSettings();
     App.canVibrate = detectVibrate();
     App.meta = G.Save.loadMeta();
     if (!App.meta.tipsSeen) App.meta.tipsSeen = {};
+    reportProgress();
+    var saveMeta = G.Save.saveMeta;
+    G.Save.saveMeta = function (m) { var ok = saveMeta(m); reportProgress(); return ok; };
     if (audio() && audio().setEnabled) { try { audio().setEnabled(!!App.settings.sound); } catch (e) { /* ignore */ } }
     if (audio() && audio().setMusic) { try { audio().setMusic(App.settings.music !== false); } catch (e) { /* ignore */ } }
 
