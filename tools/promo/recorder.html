@@ -1,0 +1,116 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>promo recorder</title></head>
+<body style="margin:0;background:#000">
+<canvas id="cv" width="1080" height="1920"></canvas>
+<script>
+// Tap every connection into ctx.destination so the game's WebAudio output can be recorded too.
+(function () {
+  var conn = AudioNode.prototype.connect;
+  AudioNode.prototype.connect = function (dest) {
+    var r = conn.apply(this, arguments);
+    var c = this.context;
+    if (dest === c.destination) {
+      if (!c.__tap) c.__tap = c.createMediaStreamDestination();
+      conn.call(this, c.__tap);
+    }
+    return r;
+  };
+})();
+</script>
+<script src="/src/core/ns.js"></script>
+<script src="/src/ui/audio.js"></script>
+<script>
+(function () {
+  var G = window.G;
+  G.App = { run: null };
+  var MODE_RUN = {
+    title: null,
+    calm: { mode: 'hub' },
+    combat: { mode: 'combat', combat: { boss: false } },
+    boss: { mode: 'combat', combat: { boss: true } },
+    end: { mode: 'victory' },
+  };
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  window.__record = async function (m) {
+    G.Audio.unlock();
+    G.Audio.setEnabled(true);
+    G.Audio.setMusic(true);
+    // the AudioContext is created by unlock(); find it through the tap
+    await sleep(300);
+    var cv = document.getElementById('cv'), cx = cv.getContext('2d');
+    var vstream = cv.captureStream(0), vtrack = vstream.getVideoTracks()[0];
+    var tracks = [vtrack];
+    var tapCtx = null;
+    // audio.js keeps its context private: grab it from any node created after unlock
+    var probe = (function () { var found = null; var orig = AudioNode.prototype.connect; return found; })();
+    if (window.__tapStream) tracks = tracks.concat(window.__tapStream.getAudioTracks());
+    var frames = new Array(m.total), fetched = 0;
+    async function load(i) { var r = await fetch('/promo/frames/' + String(i).padStart(5, '0') + '.jpg'); return createImageBitmap(await r.blob()); }
+    // prefetch the first second
+    for (var i = 0; i < Math.min(m.total, 45); i++) frames[i] = load(i);
+    fetched = Math.min(m.total, 45);
+
+    // find the audio tap stream (created lazily on the first connect to destination)
+    var ctxs = [];
+    var tapStream = null;
+    for (var tries = 0; tries < 50 && !tapStream; tries++) {
+      tapStream = window.__findTap && window.__findTap();
+      if (!tapStream) await sleep(20);
+    }
+    var stream = new MediaStream([vtrack].concat(tapStream ? tapStream.getAudioTracks() : []));
+    var types = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus'];
+    var type = types.filter(function (t) { return MediaRecorder.isTypeSupported(t); })[0];
+    var rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 12000000, audioBitsPerSecond: 192000 });
+    var blobs = [];
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) blobs.push(e.data); };
+    var stopped = new Promise(function (r) { rec.onstop = r; });
+
+    var byFrame = {};
+    m.log.forEach(function (e) { (byFrame[e.f] = byFrame[e.f] || []).push(e); });
+
+    rec.start(1000);
+    var t0 = performance.now(), dt = 1000 / m.fps, late = 0;
+    for (var f = 0; f < m.total; f++) {
+      var img = await frames[f];
+      frames[f] = null;
+      if (fetched < m.total) { frames[fetched] = load(fetched); fetched++; }
+      var target = t0 + f * dt;
+      var wait = target - performance.now();
+      if (wait > 0) await sleep(wait); else late++;
+      cx.drawImage(img, 0, 0, 1080, 1920);
+      img.close && img.close();
+      vtrack.requestFrame();
+      var mode = m.modes[f];
+      G.App.run = mode === undefined ? null : (mode === null ? MODE_RUN.end : MODE_RUN[mode]);
+      (byFrame[f] || []).forEach(function (e) {
+        try { if (e.k === 'fx') G.Audio.fx(e.a); else G.Audio.play(e.a, e.v); } catch (err) { console.log('sound err', err); }
+      });
+    }
+    await sleep(600);
+    rec.stop();
+    await stopped;
+    var blob = new Blob(blobs, { type: type });
+    var buf = new Uint8Array(await blob.arrayBuffer());
+    window.__chunks = [];
+    var CH = 4 * 1024 * 1024;
+    for (var o = 0; o < buf.length; o += CH) {
+      var s = '', part = buf.subarray(o, o + CH);
+      for (var k = 0; k < part.length; k += 32768) s += String.fromCharCode.apply(null, part.subarray(k, k + 32768));
+      window.__chunks.push(btoa(s));
+    }
+    return { type: type, bytes: buf.length, lateFrames: late, audio: !!tapStream };
+  };
+
+  // expose the tap stream once any audio node has connected to the destination
+  window.__findTap = function () {
+    return window.__tapCtx && window.__tapCtx.__tap ? window.__tapCtx.__tap.stream : null;
+  };
+  var origConn = AudioNode.prototype.connect;
+  AudioNode.prototype.connect = function (dest) {
+    if (dest && dest === (this.context && this.context.destination)) window.__tapCtx = this.context;
+    return origConn.apply(this, arguments);
+  };
+})();
+</script>
+</body></html>
