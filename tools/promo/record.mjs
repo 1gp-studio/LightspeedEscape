@@ -7,6 +7,7 @@
 // real time while re-triggering the same sounds through the game's own audio.js, and records both with
 // MediaRecorder (MP4/H.264 + AAC) — no ffmpeg needed.
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launch, sleep } from './cdp.mjs';
@@ -16,6 +17,11 @@ const BASE = process.env.BASE || 'http://127.0.0.1:5181';
 const FPS = 30, W = 405, H = 720, SCALE = 1080 / 405;     // 1080x1920 output
 const FRAMES_DIR = path.join(ROOT, 'promo', 'frames');
 const OUT = path.join(ROOT, 'promo', 'lightspeed-promo.mp4');
+// Encode settings: ~2.2 Mbps keeps a 37 s 1080x1920 clip around 10 MB (pixel art compresses well).
+//   VBPS=4000000 OUT_W=720 ENCODE_ONLY=1 node tools/promo/record.mjs   (re-encode existing frames)
+const VBPS = Number(process.env.VBPS) || 2200000;
+const OUT_W = Number(process.env.OUT_W) || 1080;
+const ENCODE_ONLY = !!process.env.ENCODE_ONLY;
 
 // ---------------------------------------------------------------------------- page-side clock
 const CLOCK = `(function () {
@@ -236,7 +242,7 @@ async function pass2(b, m) {
   const loaded = p.once('Page.loadEventFired');
   await p.send('Page.navigate', { url: BASE + '/tools/promo/recorder.html' });
   await loaded;
-  const info = await p.eval(`window.__record(${JSON.stringify({ total: m.total, fps: FPS, log: m.log, modes: m.modes })})`);
+  const info = await p.eval(`window.__record(${JSON.stringify({ total: m.total, fps: FPS, log: m.log, modes: m.modes, width: OUT_W, vbps: VBPS })})`);
   console.log('recorded', info);
   const n = await p.eval('window.__chunks.length');
   const parts = [];
@@ -245,11 +251,33 @@ async function pass2(b, m) {
   p.close();
 }
 
+// Chrome's MediaRecorder writes a fragmented MP4 whose header reports a wrong duration (some players cut it
+// short) at a large size. When ffmpeg is available (FFMPEG env, or `pip install imageio-ffmpeg`), re-encode the
+// frames with x264 + the recorded audio into a normal, small, fast-start MP4.
+function findFfmpeg() {
+  if (process.env.FFMPEG) return process.env.FFMPEG;
+  try { return execFileSync('python', ['-c', 'import imageio_ffmpeg as f; print(f.get_ffmpeg_exe())'], { encoding: 'utf8' }).trim(); }
+  catch { return null; }
+}
+function finalize() {
+  const ff = findFfmpeg();
+  if (!ff) { console.log('ffmpeg not found: keeping the MediaRecorder MP4 (large, fragmented)'); return; }
+  const dir = path.dirname(OUT), aud = path.join(dir, 'audio.m4a'), tmp = path.join(dir, 'final.mp4');
+  execFileSync(ff, ['-hide_banner', '-loglevel', 'error', '-y', '-i', OUT, '-vn', '-c:a', 'aac', '-b:a', '128k', aud]);
+  execFileSync(ff, ['-hide_banner', '-loglevel', 'error', '-y', '-framerate', String(FPS), '-i', path.join(FRAMES_DIR, '%05d.jpg'),
+    '-i', aud, '-map', '0:v', '-map', '1:a', '-vf', 'scale=in_range=pc:out_range=tv,format=yuv420p',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', process.env.CRF || '24', '-tune', 'animation', '-color_range', 'tv',
+    '-c:a', 'copy', '-shortest', '-movflags', '+faststart', tmp]);
+  fs.renameSync(tmp, OUT);
+  fs.rmSync(aud, { force: true });
+}
+
 const b = await launch({ port: 9342 });
 try {
-  const m = await pass1(b);
+  const m = ENCODE_ONLY ? { total: fs.readdirSync(FRAMES_DIR).filter((f) => f.endsWith('.jpg')).length, ...JSON.parse(fs.readFileSync(path.join(FRAMES_DIR, 'meta.json'), 'utf8')) } : await pass1(b);
   console.log(`pass 1 done: ${m.total} frames, ${m.log.length} sound events`);
   await pass2(b, m);
+  finalize();
   console.log('wrote', OUT, (fs.statSync(OUT).size / 1048576).toFixed(1) + ' MB');
 } finally {
   b.close();

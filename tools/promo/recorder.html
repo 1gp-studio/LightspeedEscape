@@ -39,6 +39,9 @@
     // the AudioContext is created by unlock(); find it through the tap
     await sleep(300);
     var cv = document.getElementById('cv'), cx = cv.getContext('2d');
+    var OW = m.width || 1080, OH = Math.round(OW * 16 / 9);
+    cv.width = OW; cv.height = OH;
+    cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
     var vstream = cv.captureStream(0), vtrack = vstream.getVideoTracks()[0];
     var tracks = [vtrack];
     var tapCtx = null;
@@ -61,7 +64,7 @@
     var stream = new MediaStream([vtrack].concat(tapStream ? tapStream.getAudioTracks() : []));
     var types = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus'];
     var type = types.filter(function (t) { return MediaRecorder.isTypeSupported(t); })[0];
-    var rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 12000000, audioBitsPerSecond: 192000 });
+    var rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: m.vbps || 2200000, audioBitsPerSecond: 128000 });
     var blobs = [];
     rec.ondataavailable = function (e) { if (e.data && e.data.size) blobs.push(e.data); };
     var stopped = new Promise(function (r) { rec.onstop = r; });
@@ -78,7 +81,7 @@
       var target = t0 + f * dt;
       var wait = target - performance.now();
       if (wait > 0) await sleep(wait); else late++;
-      cx.drawImage(img, 0, 0, 1080, 1920);
+      cx.drawImage(img, 0, 0, OW, OH);
       img.close && img.close();
       vtrack.requestFrame();
       var mode = m.modes[f];
