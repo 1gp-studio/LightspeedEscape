@@ -11,5 +11,5 @@ desktop.ini
 .shots/
 .claude/settings.local.json
 
-# Promo video output (frames + mp4) — regenerate with tools/promo/record.mjs
-/promo/
+# Promo video frames (regenerate with tools/promo/record.mjs); the final mp4 is kept
+/promo/frames/
